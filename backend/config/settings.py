@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.orgs",
     "apps.market",
+    "apps.shop",
     "apps.complaints",
     "apps.observatory",
     "apps.distribution",

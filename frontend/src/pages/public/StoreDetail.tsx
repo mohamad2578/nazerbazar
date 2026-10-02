@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, Clock, MapPin, Navigation, Phone, ShieldAlert, Star } from "lucide-react";
+import { BadgeCheck, Clock, MapPin, Navigation, Package, Phone, ShieldAlert, ShoppingBag, Star } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, Card, cx, ErrorBox, Loading, Sheet, Textarea, useToast } from "../../components/ui";
@@ -69,7 +69,8 @@ export default function StoreDetail() {
       </Card>
 
       <section>
-        <h2 className="mb-3 font-semibold">قیمت کالاها در این فروشگاه</h2>
+        <h2 className="mb-1 font-semibold">کالاهای اساسی با نرخ مصوب</h2>
+        <p className="mb-3 text-xs text-muted">نرخ این کالاها را اتحادیه تعیین می‌کند و فروشگاه حداکثر تا ۲۰٪ زیر آن می‌تواند بفروشد.</p>
         <Card className="divide-y divide-line">
           {s.offers.map((o) => (
             <Link key={o.product} to={`/p/${o.product}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-2">
@@ -86,6 +87,8 @@ export default function StoreDetail() {
           {!s.offers.length && <p className="p-6 text-center text-sm text-muted">قیمتی ثبت نشده است.</p>}
         </Card>
       </section>
+
+      <ShopSection storeId={s.id} storeName={s.name} />
 
       <section>
         <div className="mb-3 flex items-center justify-between">
@@ -110,6 +113,70 @@ export default function StoreDetail() {
       </section>
       <ReviewSheet open={reviewOpen} onClose={() => setReviewOpen(false)} storeId={s.id} />
     </div>
+  );
+}
+
+type ShopProduct = {
+  id: number; name: string; description: string; image: string | null; price: number; old_price: number | null;
+  discount_percent: number | null; unit_display: string; brand: string; category_name: string; is_available: boolean;
+};
+
+/** ویترین فروشگاه اینترنتی: محصولات اختصاصی خود فروشگاه با قیمت آزاد. */
+function ShopSection({ storeId, storeName }: { storeId: number; storeName: string }) {
+  const [cat, setCat] = useState("");
+  const q = useQuery({ queryKey: ["public-shop", storeId], queryFn: () => api.get<ShopProduct[]>(`/public/stores/${storeId}/shop/`) });
+  const items = q.data ?? [];
+  if (!items.length) return null;
+  const cats = [...new Set(items.map((p) => p.category_name).filter(Boolean))];
+  const shown = cat ? items.filter((p) => p.category_name === cat) : items;
+  return (
+    <section>
+      <div className="mb-1 flex items-center gap-2">
+        <ShoppingBag className="size-5 text-brand" />
+        <h2 className="font-semibold">فروشگاه اینترنتی {storeName}</h2>
+      </div>
+      <p className="mb-3 text-xs text-muted">محصولات اختصاصی این فروشگاه؛ قیمت‌ها را خود فروشنده تعیین می‌کند.</p>
+      {cats.length > 1 && (
+        <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
+          <Chip active={!cat} onClick={() => setCat("")}>همه</Chip>
+          {cats.map((c) => <Chip key={c} active={cat === c} onClick={() => setCat(c)}>{c}</Chip>)}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        {shown.map((p) => (
+          <Card key={p.id} className={cx("overflow-hidden", !p.is_available && "opacity-70")}>
+            <div className="relative aspect-[4/3] bg-surface-2">
+              {p.image
+                ? <img src={p.image} alt="" loading="lazy" className="size-full object-cover" />
+                : <span className="grid size-full place-items-center text-muted"><Package className="size-7" /></span>}
+              {p.discount_percent ? <Badge tone="ok" className="absolute right-2 top-2">{num(p.discount_percent)}٪ تخفیف</Badge> : null}
+              {!p.is_available && <Badge tone="warn" className="absolute left-2 top-2">ناموجود</Badge>}
+            </div>
+            <div className="p-3">
+              <div className="truncate text-sm font-medium">{p.name}</div>
+              {(p.brand || p.unit_display) && (
+                <div className="mt-0.5 truncate text-[11px] text-muted">{[p.brand, `هر ${p.unit_display}`].filter(Boolean).join(" · ")}</div>
+              )}
+              <div className="mt-1.5 flex items-baseline gap-2">
+                <span className="font-bold tabular">{toman(p.price)}</span>
+                {p.old_price ? <span className="text-[11px] text-muted line-through tabular">{toman(p.old_price, false)}</span> : null}
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cx("h-8 shrink-0 rounded-full border px-3.5 text-xs transition", active ? "border-brand bg-brand text-brand-ink" : "border-line bg-surface text-ink")}
+    >
+      {children}
+    </button>
   );
 }
 

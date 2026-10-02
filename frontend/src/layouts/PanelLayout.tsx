@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, BarChart3, Bell, Boxes, Building2, ClipboardList, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
-  Package, Settings2, Store, Tags, Truck, Users, X,
+  Package, Settings2, ShoppingBag, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -22,6 +22,7 @@ export const NAV: Item[] = [
   { to: "/panel/prices", label: "قیمت‌های من", icon: Tags, roles: ["store"], mobile: true },
   { to: "/panel/stores", label: "فروشگاه‌ها", icon: Store, roles: M, mobile: true },
   { to: "/panel/products", label: "کالاها و نرخ مصوب", icon: Package, roles: M, mobile: true },
+  { to: "/panel/my-shop", label: "فروشگاه اینترنتی من", icon: ShoppingBag, roles: ["store"], mobile: true },
   { to: "/panel/complaints", label: "شکایات", icon: MessageSquareWarning, roles: [...M, "store"], mobile: true },
   { to: "/panel/quotas", label: "سهمیه‌ها", icon: Truck, roles: ["union", "store"] },
   { to: "/panel/allocations", label: "تخصیص و توزیع", icon: Boxes, roles: M },

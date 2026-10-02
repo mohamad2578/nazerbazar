@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Pencil, Plus, Search, TrendingUp } from "lucide-react";
 import { useState } from "react";
+import ImageUpload from "../../components/ImageUpload";
 import Sparkline from "../../components/Sparkline";
 import { Badge, Button, Card, DataTable, Empty, Field, Input, Loading, PageHeader, PriceInput, Select, Sheet, Textarea, useToast } from "../../components/ui";
 import { api, download, fieldErrors, type Page } from "../../lib/api";
@@ -11,7 +12,7 @@ type ProductT = {
   id: number; union: number; union_name: string; category: number | null; category_name: string; commodity: number | null;
   commodity_name: string; name: string; unit: string; unit_display: string; unit_amount: string; description: string;
   current_price: number; max_discount_percent: number; min_allowed_price: number; price_changed_at: string | null;
-  is_active: boolean; offers_count: number; stale_count: number;
+  is_active: boolean; offers_count: number; stale_count: number; image: string | null;
 };
 
 const UNITS = [["kg", "کیلوگرم"], ["g", "گرم"], ["piece", "عدد"], ["pack", "بسته"], ["l", "لیتر"], ["carton", "کارتن"]];
@@ -44,7 +45,14 @@ export default function Products() {
             rows={q.data.results}
             onRowClick={canEdit ? setPricing : undefined}
             columns={[
-              { key: "name", label: "کالا", render: (p) => <div><div className="font-medium">{p.name}</div><div className="text-xs text-muted">{p.union_name} · {p.unit_display}</div></div> },
+              { key: "name", label: "کالا", render: (p) => (
+                <div className="flex items-center gap-2.5">
+                  {p.image
+                    ? <img src={p.image} alt="" className="size-10 shrink-0 rounded-lg object-cover" />
+                    : <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-surface-2 text-sm font-bold text-muted">{p.name.slice(0, 1)}</span>}
+                  <div className="min-w-0"><div className="truncate font-medium">{p.name}</div><div className="truncate text-xs text-muted">{p.union_name} · {p.unit_display}</div></div>
+                </div>
+              ) },
               { key: "current_price", label: "نرخ مصوب", render: (p) => <b className="tabular">{toman(p.current_price)}</b> },
               { key: "min", label: "حداقل مجاز", render: (p) => <span className="tabular text-muted">{toman(p.min_allowed_price)}</span>, hideOnMobile: true },
               { key: "offers_count", label: "فروشگاه", render: (p) => num(p.offers_count) },
@@ -79,6 +87,7 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
     commodity: product?.commodity ?? "", description: product?.description ?? "", max_discount_percent: product?.max_discount_percent ?? 20,
     union: product?.union ?? "", initial_price: "",
   });
+  const [image, setImage] = useState<File | null | undefined>(undefined);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const m = useMutation({
     mutationFn: () => {
@@ -86,6 +95,13 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
       if (f.initial_price) body.initial_price = toRial(f.initial_price);
       else delete body.initial_price;
       if (!body.union) delete body.union;
+      // با تصویر باید multipart بفرستیم؛ بدون تغییر تصویر، JSON ساده کافی است
+      if (image !== undefined) {
+        const fd = new FormData();
+        for (const [k, v] of Object.entries(body)) if (v !== null && v !== "") fd.set(k, String(v));
+        fd.set("image", image ?? "");
+        return product ? api.patch(`/products/${product.id}/`, fd) : api.post("/products/", fd);
+      }
       return product ? api.patch(`/products/${product.id}/`, body) : api.post("/products/", body);
     },
     onSuccess: () => { toast("ذخیره شد"); qc.invalidateQueries({ queryKey: ["products-panel"] }); onClose(); },
@@ -94,6 +110,11 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
   return (
     <Sheet open onClose={onClose} title={product ? "ویرایش کالا" : "تعریف کالای جدید"} footer={<Button className="w-full" loading={m.isPending} onClick={() => m.mutate()}>ذخیره</Button>}>
       <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="تصویر کالا" error={err.image} className="sm:col-span-2">
+          <div className="max-w-40">
+            <ImageUpload value={product?.image} onChange={setImage} hint="مربعی و کوچک؛ خودکار فشرده می‌شود." />
+          </div>
+        </Field>
         <Field label="نام کالا" error={err.name} className="sm:col-span-2"><Input value={f.name} onChange={set("name")} /></Field>
         {user!.role === "admin" && !product && (
           <Field label="اتحادیه" error={err.union} className="sm:col-span-2">

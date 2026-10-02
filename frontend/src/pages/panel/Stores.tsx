@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, Download, Phone, Search } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Badge, Button, Card, DataTable, Empty, Field, Input, Loading, PageHeader, Segmented, Sheet, STATUS_TONE, Textarea, useToast } from "../../components/ui";
 import { api, download, type Page } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { date, num, telLink } from "../../lib/format";
+
+const LocationPicker = lazy(() => import("../../components/MapView").then((m) => ({ default: m.LocationPicker })));
 
 type StoreT = {
   id: number; name: string; union_name: string; county_name: string; license_no: string; phone: string; address: string;
@@ -68,15 +70,29 @@ export default function Stores() {
 
 function StoreSheet({ store, canManage, onClose }: { store: StoreT; canManage: boolean; onClose: () => void }) {
   const [reason, setReason] = useState("");
+  const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(
+    store.lat ? { lat: +store.lat, lng: +store.lng } : null,
+  );
   const qc = useQueryClient();
   const toast = useToast();
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["stores"] });
+    qc.invalidateQueries({ queryKey: ["pending-stores"] });
+  };
   const act = useMutation({
     mutationFn: ({ action, body }: { action: string; body?: object }) => api.post(`/stores/${store.id}/${action}/`, body),
     onSuccess: () => {
       toast("انجام شد");
-      qc.invalidateQueries({ queryKey: ["stores"] });
-      qc.invalidateQueries({ queryKey: ["pending-stores"] });
+      refresh();
       onClose();
+    },
+    onError: (e: Error) => toast(e.message, "danger"),
+  });
+  const saveLoc = useMutation({
+    mutationFn: () => api.patch(`/stores/${store.id}/`, { lat: loc?.lat, lng: loc?.lng }),
+    onSuccess: () => {
+      toast("موقعیت فروشگاه ثبت شد");
+      refresh();
     },
     onError: (e: Error) => toast(e.message, "danger"),
   });
@@ -93,6 +109,23 @@ function StoreSheet({ store, canManage, onClose }: { store: StoreT; canManage: b
         {store.status_reason && <Info label="دلیل" value={store.status_reason} wide />}
       </dl>
       {store.license_image && <a href={store.license_image} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-brand underline">مشاهده تصویر پروانه</a>}
+
+      {canManage && (
+        <div className="mt-5 border-t border-line pt-4">
+          <Field
+            label="موقعیت روی نقشه"
+            hint={loc ? "برای جابه‌جایی، روی نقطه دلخواه نقشه بزنید." : "این فروشگاه هنوز موقعیت ندارد و روی نقشه سایت دیده نمی‌شود؛ روی نقشه بزنید."}
+          >
+            <Suspense fallback={<Loading />}>
+              <LocationPicker value={loc} onChange={setLoc} height={220} />
+            </Suspense>
+          </Field>
+          <Button size="sm" className="mt-2" variant="soft" loading={saveLoc.isPending} disabled={!loc} onClick={() => saveLoc.mutate()}>
+            ذخیره موقعیت
+          </Button>
+        </div>
+      )}
+
       {canManage && (
         <div className="mt-5 space-y-3 border-t border-line pt-4">
           <Field label="دلیل (برای رد یا تعلیق الزامی است)">

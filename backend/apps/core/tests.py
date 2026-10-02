@@ -261,3 +261,72 @@ class AnalyticsTests(Base):
             self.assertEqual(c.get("/api/analytics/export/prices/").status_code, 200)
         data = self.client_for(self.uni2).get("/api/analytics/overview/").data
         self.assertEqual(data["stores"]["total"], 0)
+
+
+class ShopTests(Base):
+    """فروشگاه اینترنتی: محصولات اختصاصی فروشگاه، بدون محدودیت نرخ مصوب اتحادیه."""
+
+    def test_store_manages_own_products_with_free_price(self):
+        store = self.stores[0]
+        c = self.client_for(store.owner)
+        r = c.post("/api/shop-products/", {"name": "زعفران", "price": 9_500_000, "unit": "piece"})
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["store"], store.pk)
+        # قیمت آزاد است: برخلاف کالای اساسی، سقف/کف نرخ مصوب اعمال نمی‌شود
+        self.assertEqual(r.data["price"], 9_500_000)
+        pid = r.data["id"]
+        self.assertEqual(c.patch(f"/api/shop-products/{pid}/", {"price": 12_000_000}).status_code, 200)
+        self.assertEqual(c.delete(f"/api/shop-products/{pid}/").status_code, 204)
+
+    def test_store_cannot_touch_other_store_products(self):
+        from apps.shop.models import ShopProduct
+
+        mine = ShopProduct.objects.create(store=self.stores[0], name="کالای من", price=1000)
+        other = self.client_for(self.stores[1].owner)
+        self.assertEqual(other.get(f"/api/shop-products/{mine.pk}/").status_code, 404)
+        self.assertEqual(other.patch(f"/api/shop-products/{mine.pk}/", {"price": 5}).status_code, 404)
+        # فروشگاه دوم فقط محصولات خودش را می‌بیند
+        self.assertEqual(other.get("/api/shop-products/").data["count"], 0)
+
+    def test_pending_store_cannot_add_products(self):
+        store = self.stores[0]
+        store.status = Store.Status.PENDING
+        store.save()
+        r = self.client_for(store.owner).post("/api/shop-products/", {"name": "x", "price": 100})
+        self.assertEqual(r.status_code, 400)
+
+    def test_public_shop_hides_inactive_products(self):
+        from apps.shop.models import ShopProduct
+
+        store = self.stores[0]
+        ShopProduct.objects.create(store=store, name="نمایش‌داده‌شده", price=1000)
+        ShopProduct.objects.create(store=store, name="پنهان", price=2000, is_active=False)
+        rows = APIClient().get(f"/api/public/stores/{store.pk}/shop/").data
+        self.assertEqual([r["name"] for r in rows], ["نمایش‌داده‌شده"])
+
+    def test_union_sees_member_store_products_readonly(self):
+        from apps.shop.models import ShopProduct
+
+        ShopProduct.objects.create(store=self.stores[0], name="کالا", price=1000)
+        union = self.client_for(self.uni)
+        self.assertEqual(union.get("/api/shop-products/").data["count"], 1)
+        # اتحادیه در این بخش دخالتی ندارد؛ فقط مشاهده
+        self.assertEqual(union.post("/api/shop-products/", {"name": "y", "price": 1}).status_code, 403)
+        self.assertEqual(self.client_for(self.uni2).get("/api/shop-products/").data["count"], 0)
+
+
+class StoreLocationTests(Base):
+    def test_union_can_set_store_location_and_map_lists_it(self):
+        store = self.stores[0]
+        Store.objects.filter(pk=store.pk).update(lat=None, lng=None)
+        self.assertNotIn(store.pk, [s["id"] for s in APIClient().get("/api/public/map/").data])
+        r = self.client_for(self.uni).patch(f"/api/stores/{store.pk}/", {"lat": 34.79, "lng": 48.51})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertIn(store.pk, [s["id"] for s in APIClient().get("/api/public/map/").data])
+
+    def test_store_owner_updates_own_location(self):
+        store = self.stores[1]
+        r = self.client_for(store.owner).patch("/api/my-store/", {"lat": 34.80, "lng": 48.52})
+        self.assertEqual(r.status_code, 200, r.data)
+        store.refresh_from_db()
+        self.assertEqual(float(store.lat), 34.80)

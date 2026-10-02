@@ -31,6 +31,7 @@ const CommodityReports = lazy(() => import("./pages/panel/CommodityReports"));
 const Org = lazy(() => import("./pages/panel/Org"));
 const Slides = lazy(() => import("./pages/panel/Slides"));
 const StoreProfile = lazy(() => import("./pages/panel/StoreProfile"));
+const MyShop = lazy(() => import("./pages/panel/MyShop"));
 const Notifications = lazy(() => import("./pages/panel/Notifications"));
 
 function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] }) {
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="products" element={<RequireAuth roles={MANAGERS}><Products /></RequireAuth>} />
           <Route path="prices" element={<RequireAuth roles={["store"]}><Prices /></RequireAuth>} />
           <Route path="profile" element={<RequireAuth roles={["store"]}><StoreProfile /></RequireAuth>} />
+          <Route path="my-shop" element={<RequireAuth roles={["store"]}><MyShop /></RequireAuth>} />
           <Route path="complaints" element={<Complaints />} />
           <Route path="complaints/:id" element={<ComplaintDetail />} />
           <Route path="quotas" element={<RequireAuth roles={["union", "store", "chamber", "governorate"]}><Quotas /></RequireAuth>} />

@@ -120,12 +120,13 @@ class UnionViewSet(ScopedModelViewSet):
 
 
 class StoreViewSet(ScopedModelViewSet):
-    """کارتابل فروشگاه‌ها برای اتحادیه (تایید/رد/تعلیق) و مشاهده برای سطوح بالاتر"""
+    """کارتابل فروشگاه‌ها؛ تایید/رد/تعلیق توسط اتحادیه، اتاق اصناف، استانداری یا مدیر کل."""
 
     queryset = Store.objects.select_related("union__chamber__county", "owner")
     serializer_class = StoreSerializer
     read_roles = ("governorate", "chamber", "union")
-    write_roles = ("union",)
+    # تایید/رد/تعلیق فروشگاه را اتحادیه، اتاق اصناف، استانداری و مدیر کل انجام می‌دهند
+    write_roles = ("union", "chamber", "governorate")
     http_method_names = ["get", "patch", "post", "head", "options"]
     filterset_fields = ["status", "union", "union__chamber", "union__chamber__county", "is_verified"]
     search_fields = ["name", "address", "owner__mobile", "license_no"]

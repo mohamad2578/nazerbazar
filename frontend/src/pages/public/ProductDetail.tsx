@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, BadgeCheck, Clock, Info, List, LocateFixed, Map as MapIcon, Navigation, Phone, ShieldAlert, Star } from "lucide-react";
+import { ArrowRight, BadgeCheck, Clock, Info, List, LocateFixed, Map as MapIcon, Phone, ShieldAlert, ShoppingBag, Star } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import Directions from "../../components/Directions";
 import { ProductThumb } from "../../components/ProductCard";
 import Sparkline from "../../components/Sparkline";
 import { Badge, Card, cx, Empty, ErrorBox, Loading, Segmented } from "../../components/ui";
 import { api } from "../../lib/api";
-import { ago, directionsLink, km, num, telLink, toman } from "../../lib/format";
+import { ago, km, num, telLink, toman } from "../../lib/format";
 import { useGeo } from "../../lib/prefs";
 
 const MapView = lazy(() => import("../../components/MapView"));
@@ -162,6 +163,9 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
             {s.is_verified && <BadgeCheck className="size-4 shrink-0 text-brand" aria-label="احراز شده" />}
           </Link>
           <div className="mt-0.5 line-clamp-1 text-xs text-muted">{s.address}</div>
+          <Link to={`/s/${s.id}`} className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand">
+            <ShoppingBag className="size-3.5" /> جهت خرید اینترنتی وارد صفحه فروشگاه شوید
+          </Link>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
             {s.rating_count > 0 && (
               <span className="inline-flex items-center gap-0.5">
@@ -187,9 +191,12 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
         <a href={telLink(s.phone)} className={cx("inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-surface-2 text-sm", !s.phone && "pointer-events-none opacity-40")}>
           <Phone className="size-4" /> تماس
         </a>
-        <a href={directionsLink(s.lat, s.lng)} className={cx("inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-surface-2 text-sm", !s.lat && "pointer-events-none opacity-40")}>
-          <Navigation className="size-4" /> مسیریابی
-        </a>
+        <Directions
+          lat={s.lat}
+          lng={s.lng}
+          name={s.name}
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-surface-2 text-sm"
+        />
         <Link to={`/report?store=${s.id}&product=${productId}`} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-danger-soft text-sm text-danger">
           <ShieldAlert className="size-4" /> تخلف
         </Link>

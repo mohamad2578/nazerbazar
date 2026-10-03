@@ -72,13 +72,22 @@ def set_official_price(product: Product, price: int, by: User, max_discount=None
         product.price_changed_at = record.created_at
     product.save(update_fields=["current_price", "max_discount_percent", "price_changed_at", "updated_at"])
 
+    if changed:
+        # قیمت اعلامی همه فروشگاه‌ها فورا برابر نرخ مصوب جدید می‌شود تا قیمت قدیمی
+        # (که ممکن است خارج از بازه مجاز باشد) به مردم نمایش داده نشود. فروشگاه با
+        # ورود به داشبورد می‌تواند دوباره تا سقف تخفیف مجاز، قیمت خود را کم کند.
+        # confirmed_at عمدا دست‌نخورده می‌ماند تا کالا همچنان «در انتظار به‌روزرسانی»
+        # علامت بخورد و مهلت ۲۴ ساعته برقرار باشد.
+        StoreOffer.objects.filter(product=product).exclude(price=price).update(price=price, updated_at=timezone.now())
+
     if changed and previous:
         hours = settings.MARKET["UPDATE_GRACE_HOURS"]
         owners = User.objects.filter(stores__offers__product=product).distinct()
         notify(
             owners,
             f"تغییر نرخ «{product.name}»",
-            f"نرخ جدید {price:,} ریال است. ظرف {hours} ساعت قیمت خود را به‌روز کنید؛ "
+            f"نرخ جدید {price:,} ریال است و فعلا قیمت فروشگاه شما هم برابر همین نرخ شد. "
+            f"ظرف {hours} ساعت وارد شوید و قیمت خود را تایید یا کم کنید؛ "
             "در غیر این صورت این کالا موقتا از فهرست فروشگاه شما حذف می‌شود.",
             "/panel/prices",
         )

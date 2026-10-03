@@ -81,3 +81,6 @@ class ShopProduct(TimeStamped):
         if not self.old_price or self.old_price <= self.price:
             return None
         return round((self.old_price - self.price) / self.old_price * 100)
+
+
+from .orders import Order, OrderEvent, OrderItem  # noqa: E402,F401  (ثبت مدل‌ها در اپ)

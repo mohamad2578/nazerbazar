@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Navigation, PackageCheck, Phone } from "lucide-react";
+import Directions from "../../components/Directions";
 import { Card, Empty, ErrorBox, Loading } from "../../components/ui";
 import { api } from "../../lib/api";
-import { directionsLink, num, telLink, toman } from "../../lib/format";
+import { num, telLink, toman } from "../../lib/format";
 import { useCounty } from "../../lib/prefs";
 
 type Row = {
@@ -48,7 +49,9 @@ export default function Subsidized() {
                     <span className="text-xs text-ok">موجودی حدود {num(r.remaining)} {r.unit}</span>
                     <div className="flex gap-2">
                       <a href={telLink(r.store.phone)} className="grid size-9 place-items-center rounded-xl bg-surface-2" aria-label="تماس"><Phone className="size-4" /></a>
-                      <a href={directionsLink(r.store.lat, r.store.lng)} className="grid size-9 place-items-center rounded-xl bg-surface-2" aria-label="مسیریابی"><Navigation className="size-4" /></a>
+                      <Directions lat={r.store.lat} lng={r.store.lng} name={r.store.name} className="grid size-9 place-items-center rounded-xl bg-surface-2">
+                        <Navigation className="size-4" />
+                      </Directions>
                     </div>
                   </div>
                 </Card>

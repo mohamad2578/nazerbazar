@@ -330,3 +330,107 @@ class StoreLocationTests(Base):
         self.assertEqual(r.status_code, 200, r.data)
         store.refresh_from_db()
         self.assertEqual(float(store.lat), 34.80)
+
+
+class PriceSnapTests(Base):
+    """با تغییر نرخ مصوب، قیمت اعلامی فروشگاه‌ها فورا برابر نرخ جدید می‌شود."""
+
+    def test_offers_snap_to_new_official_price(self):
+        s0, s1 = self.stores[0], self.stores[1]
+        upsert_offer(s0, self.product, 850_000)   # ۱۵٪ زیر نرخ
+        upsert_offer(s1, self.product, 1_000_000)  # برابر نرخ
+        set_official_price(self.product, 1_200_000, self.uni)
+        self.assertEqual([o.price for o in StoreOffer.objects.filter(product=self.product).order_by("pk")],
+                         [1_200_000, 1_200_000])
+        # همچنان «در انتظار به‌روزرسانی» است تا فروشگاه تایید/اصلاح کند
+        self.assertTrue(StoreOffer.objects.get(store=s0, product=self.product).is_stale)
+        # و فروشگاه می‌تواند دوباره تا سقف تخفیف مجاز قیمت را کم کند
+        upsert_offer(s0, self.product, 960_000)
+        offer = StoreOffer.objects.get(store=s0, product=self.product)
+        self.assertEqual(offer.price, 960_000)
+        self.assertFalse(offer.is_stale)
+
+    def test_unchanged_price_does_not_touch_offers(self):
+        upsert_offer(self.stores[0], self.product, 850_000)
+        set_official_price(self.product, 1_000_000, self.uni)  # همان نرخ قبلی
+        self.assertEqual(StoreOffer.objects.get(store=self.stores[0]).price, 850_000)
+
+
+class StoreApprovalRolesTests(Base):
+    """تایید فروشگاه علاوه بر اتحادیه، توسط اتاق اصناف/استانداری/مدیر کل هم ممکن است."""
+
+    def _pending_store(self):
+        owner = User.objects.create_user(f"0912777{Store.objects.count():04d}")
+        return Store.objects.create(owner=owner, union=self.union, name="جدید", address="همدان",
+                                    status=Store.Status.PENDING)
+
+    def test_chamber_and_governorate_and_admin_can_approve(self):
+        for actor in (self.cham, self.gov, self.admin):
+            store = self._pending_store()
+            r = self.client_for(actor).post(f"/api/stores/{store.pk}/approve/")
+            self.assertEqual(r.status_code, 200, f"{actor.role}: {r.data}")
+            store.refresh_from_db()
+            self.assertEqual(store.status, Store.Status.ACTIVE)
+
+    def test_store_owner_cannot_approve_itself(self):
+        store = self._pending_store()
+        self.assertEqual(self.client_for(store.owner).post(f"/api/stores/{store.pk}/approve/").status_code, 403)
+
+
+class OrderTests(Base):
+    """سفارش از ویترین فروشگاه و گردش آن در کارتابل فروشنده."""
+
+    def setUp(self):
+        from apps.shop.models import ShopProduct
+
+        self.store = self.stores[0]
+        self.p1 = ShopProduct.objects.create(store=self.store, name="عسل", price=500_000, unit="piece")
+        self.p2 = ShopProduct.objects.create(store=self.store, name="زعفران", price=900_000, unit="g")
+
+    def _place(self, **extra):
+        body = {"items": [{"product": self.p1.pk, "quantity": 2}, {"product": self.p2.pk, "quantity": 1}],
+                "customer_name": "علی", "customer_phone": "09120000009", **extra}
+        return self.client_for(self.citizen).post(f"/api/public/stores/{self.store.pk}/order/", body, format="json")
+
+    def test_order_lands_in_store_panel_with_correct_total(self):
+        r = self._place()
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["total"], 2 * 500_000 + 900_000)
+        self.assertEqual(r.data["status"], "new")
+        # فروشنده آن را در کارتابل خود می‌بیند و صاحب فروشگاه اعلان گرفته است
+        panel = self.client_for(self.store.owner).get("/api/orders/")
+        self.assertEqual(panel.data["count"], 1)
+        self.assertTrue(self.store.owner.notifications.filter(title__contains="سفارش جدید").exists())
+        # فروشگاه دیگر این سفارش را نمی‌بیند
+        self.assertEqual(self.client_for(self.stores[1].owner).get("/api/orders/").data["count"], 0)
+
+    def test_store_moves_order_through_statuses(self):
+        oid = self._place().data["id"]
+        c = self.client_for(self.store.owner)
+        for status in ("confirmed", "preparing", "ready", "delivered"):
+            r = c.post(f"/api/orders/{oid}/transition/", {"status": status})
+            self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(c.get("/api/orders/summary/").data["delivered"], 1)
+        # پس از تحویل، تغییر وضعیت دیگر مجاز نیست
+        self.assertEqual(c.post(f"/api/orders/{oid}/transition/", {"status": "preparing"}).status_code, 400)
+
+    def test_customer_can_cancel_only_before_preparing(self):
+        code = self._place().data["code"]
+        c = self.client_for(self.citizen)
+        self.assertEqual(len(c.get("/api/public/orders/mine/").data), 1)
+        oid = self._place().data["id"]
+        self.client_for(self.store.owner).post(f"/api/orders/{oid}/transition/", {"status": "confirmed"})
+        self.client_for(self.store.owner).post(f"/api/orders/{oid}/transition/", {"status": "preparing"})
+        self.assertEqual(c.post(f"/api/public/orders/{code}/cancel/").status_code, 200)
+        second_code = [o["code"] for o in c.get("/api/public/orders/mine/").data if o["id"] == oid][0]
+        self.assertEqual(c.post(f"/api/public/orders/{second_code}/cancel/").status_code, 400)
+
+    def test_unavailable_product_is_rejected(self):
+        self.p1.is_available = False
+        self.p1.save()
+        self.assertEqual(self._place().status_code, 400)
+
+    def test_delivery_requires_address(self):
+        r = self._place(delivery="delivery")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self._place(delivery="delivery", address="همدان، خیابان اول").status_code, 201)

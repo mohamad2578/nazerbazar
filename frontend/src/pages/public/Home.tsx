@@ -81,8 +81,9 @@ export default function Home() {
       </section>
 
       {!searching && (
-        <section className="grid grid-cols-3 gap-2 sm:gap-3">
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <QuickLink to="/subsidized" icon={<PackageCheck className="size-5" />} title="کالای تنظیم بازار" sub="سهمیه‌ای و یارانه‌ای" />
+          <QuickLink to="/register-store" icon={<StoreIcon className="size-5" />} title="ثبت‌نام فروشگاه" sub="ویژه صاحبان صنف" />
           <QuickLink to="/observatory" icon={<BarChart3 className="size-5" />} title="رصد بازار" sub="قیمت و سبد خانوار" />
           <QuickLink to="/report" icon={<ShieldAlert className="size-5" />} title="گزارش تخلف" sub="گران‌فروشی، کم‌فروشی" danger />
         </section>

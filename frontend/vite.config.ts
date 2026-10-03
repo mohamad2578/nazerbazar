@@ -14,8 +14,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icon.svg", "apple-touch-icon.png"],
       manifest: {
-        name: "ناظر بازار — شفافیت قیمت کالاهای اساسی",
-        short_name: "ناظر بازار",
+        name: "ناظر ۷۲۴ — شفافیت قیمت کالاهای اساسی",
+        short_name: "ناظر ۷۲۴",
         description: "مقایسه قیمت کالاهای اساسی در فروشگاه‌های مجاز و ثبت تخلف",
         lang: "fa",
         dir: "rtl",

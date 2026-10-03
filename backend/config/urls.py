@@ -15,6 +15,7 @@ from apps.market import api as market
 from apps.observatory import api as observatory
 from apps.orgs import api as orgs
 from apps.shop import api as shop
+from apps.shop import order_api as orders
 
 router = DefaultRouter()
 router.register("slides", cms.SlideViewSet, basename="slide")
@@ -36,6 +37,7 @@ router.register("shares", distribution.ShareViewSet, basename="share")
 router.register("quotas", distribution.QuotaViewSet, basename="quota")
 router.register("shop-categories", shop.ShopCategoryViewSet, basename="shop-category")
 router.register("shop-products", shop.MyShopProductViewSet, basename="shop-product")
+router.register("orders", orders.OrderViewSet, basename="order")
 router.register("public/geo", orgs.PublicGeoViewSet, basename="public-geo")
 
 api = [
@@ -57,6 +59,9 @@ api = [
     path("public/stores/<int:pk>/shop/", shop.public_shop),
     path("public/shop-products/", shop.public_shop_products),
     path("store/shop-summary/", shop.my_shop_summary),
+    path("public/stores/<int:pk>/order/", orders.place_order),
+    path("public/orders/mine/", orders.my_orders),
+    path("public/orders/<str:code>/cancel/", orders.cancel_my_order),
     path("public/map/", market.public_map),
     path("public/observatory/", observatory.public_observatory),
     path("public/subsidized/", distribution.public_subsidized),

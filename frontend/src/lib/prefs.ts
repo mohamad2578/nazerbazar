@@ -32,7 +32,23 @@ export function usePref<T>(key: string, fallback: T) {
 }
 
 export type County = { id: number; name: string; lat?: string; lng?: string };
-export const useCounty = () => usePref<County | null>("nb.county", null);
+
+/** شهرستان پیش‌فرض سایت تا زمانی که کاربر خودش انتخاب کند. */
+export const DEFAULT_COUNTY: County = { id: 1, name: "همدان" };
+
+// کاربرانی که پیش از تعیین پیش‌فرض، مقدار «همه شهرستان‌ها» (null) ذخیره کرده بودند
+// یک‌بار به شهرستان پیش‌فرض منتقل می‌شوند؛ پس از آن انتخاب خودشان محترم است.
+try {
+  if (!localStorage.getItem("nb.county.init")) {
+    localStorage.setItem("nb.county.init", "1");
+    if (!localStorage.getItem("nb.county") || localStorage.getItem("nb.county") === "null")
+      localStorage.setItem("nb.county", JSON.stringify(DEFAULT_COUNTY));
+  }
+} catch {
+  /* حالت خصوصی مرورگر */
+}
+
+export const useCounty = () => usePref<County | null>("nb.county", DEFAULT_COUNTY);
 
 /** موقعیت فعلی کاربر برای محاسبه فاصله فروشگاه‌ها */
 export function useGeo() {

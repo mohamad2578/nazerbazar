@@ -10,7 +10,7 @@ export function Logo({ small }: { small?: boolean }) {
     <Link to="/" className="flex items-center gap-2">
       <img src="/icon.svg" alt="" className={small ? "size-8" : "size-9"} />
       <div className="leading-tight">
-        <div className="font-bold">ناظر بازار</div>
+        <div className="font-bold">ناظر ۷۲۴</div>
         {!small && <div className="text-[11px] text-muted">شفافیت قیمت کالاهای اساسی</div>}
       </div>
     </Link>
@@ -46,6 +46,9 @@ export default function PublicLayout() {
             <NavLink to="/subsidized" className={({ isActive }) => cx("rounded-lg px-3 py-2 text-sm", isActive ? "bg-brand-soft text-brand" : "text-muted hover:text-ink")}>
               کالای تنظیم بازار
             </NavLink>
+            <NavLink to="/register-store" className={({ isActive }) => cx("rounded-lg px-3 py-2 text-sm", isActive ? "bg-brand-soft text-brand" : "text-muted hover:text-ink")}>
+              ثبت‌نام فروشگاه
+            </NavLink>
           </nav>
           <div className="mr-auto flex items-center gap-2">
             <CountyPicker compact />
@@ -64,7 +67,7 @@ export default function PublicLayout() {
       </main>
       <footer className="mx-auto hidden max-w-6xl px-4 py-10 text-sm text-muted lg:block">
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
-          <span>سامانه ناظر بازار</span>
+          <span>سامانه ناظر ۷۲۴</span>
           <div className="flex gap-4">
             <Link to="/register-store" className="hover:text-ink">ثبت‌نام فروشگاه</Link>
             <Link to="/report" className="hover:text-ink">گزارش تخلف</Link>

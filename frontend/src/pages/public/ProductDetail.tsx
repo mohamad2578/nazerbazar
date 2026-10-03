@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, BadgeCheck, Clock, Info, List, LocateFixed, Map as MapIcon, Phone, ShieldAlert, ShoppingBag, Star } from "lucide-react";
+import { ArrowRight, BadgeCheck, ChevronLeft, Clock, Info, List, LocateFixed, Map as MapIcon, Phone, ShieldAlert, ShoppingBag, Star } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Directions from "../../components/Directions";
@@ -19,6 +19,7 @@ export type Offer = {
   confirmed_at: string;
   pending_update: boolean;
   distance_km: number | null;
+  shop_products: number;
   store: {
     id: number; name: string; address: string; phone: string; lat: string | null; lng: string | null;
     working_hours: string; is_verified: boolean; rating_avg: string; rating_count: number; photo: string | null;
@@ -158,14 +159,12 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
           {num(rank)}
         </span>
         <div className="min-w-0 flex-1">
-          <Link to={`/s/${s.id}`} className="flex items-center gap-1 font-medium">
+          <Link to={`/s/${s.id}`} className="flex flex-wrap items-center gap-1.5 font-medium">
             <span className="truncate">{s.name}</span>
             {s.is_verified && <BadgeCheck className="size-4 shrink-0 text-brand" aria-label="احراز شده" />}
+            {o.shop_products > 0 && <Badge tone="brand">فروش اینترنتی</Badge>}
           </Link>
           <div className="mt-0.5 line-clamp-1 text-xs text-muted">{s.address}</div>
-          <Link to={`/s/${s.id}`} className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand">
-            <ShoppingBag className="size-3.5" /> جهت خرید اینترنتی وارد صفحه فروشگاه شوید
-          </Link>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
             {s.rating_count > 0 && (
               <span className="inline-flex items-center gap-0.5">
@@ -187,6 +186,21 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
           {o.discount_percent > 0 && <Badge tone="ok" className="mt-1">{num(o.discount_percent, 1)}٪ زیر نرخ</Badge>}
         </div>
       </div>
+      {o.shop_products > 0 && (
+        <Link
+          to={`/s/${s.id}`}
+          className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-brand px-4 py-3 text-brand-ink transition hover:bg-brand-strong"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <ShoppingBag className="size-5" />
+            خرید اینترنتی از این فروشگاه
+          </span>
+          <span className="flex items-center gap-1 text-xs opacity-90">
+            {num(o.shop_products)} محصول
+            <ChevronLeft className="size-4" />
+          </span>
+        </Link>
+      )}
       <div className="mt-3 grid grid-cols-3 gap-2">
         <a href={telLink(s.phone)} className={cx("inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-surface-2 text-sm", !s.phone && "pointer-events-none opacity-40")}>
           <Phone className="size-4" /> تماس

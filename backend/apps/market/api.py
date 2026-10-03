@@ -251,7 +251,7 @@ def public_products(request):
     return paginator.get_paginated_response([_product_card(p, request) for p in page])
 
 
-def _offer_row(o, request, lat=None, lng=None, now=None):
+def _offer_row(o, request, lat=None, lng=None, now=None, shop_counts=None):
     s = o.store
     row = {
         "id": o.pk, "price": o.price, "discount_percent": o.discount_percent, "confirmed_at": o.confirmed_at,
@@ -263,10 +263,24 @@ def _offer_row(o, request, lat=None, lng=None, now=None):
             "photo": request.build_absolute_uri(s.photo.url) if s.photo else None,
         },
         "distance_km": None,
+        # تعداد محصولات ویترین اینترنتی این فروشگاه (۰ یعنی فروشگاه اینترنتی ندارد)
+        "shop_products": (shop_counts or {}).get(s.pk, 0),
     }
     if lat and lng and s.lat is not None and s.lng is not None:
         row["distance_km"] = round(haversine_km(lat, lng, s.lat, s.lng), 2)
     return row
+
+
+def _shop_counts(store_ids) -> dict[int, int]:
+    """شمار محصولات فعال و موجودِ ویترین اینترنتی، به تفکیک فروشگاه."""
+    from apps.shop.models import ShopProduct
+
+    rows = (
+        ShopProduct.objects.filter(store_id__in=store_ids, is_active=True, is_available=True)
+        .values("store_id")
+        .annotate(n=Count("pk"))
+    )
+    return {r["store_id"]: r["n"] for r in rows}
 
 
 @api_view(["GET"])
@@ -276,8 +290,9 @@ def public_product_detail(request, pk):
         Product.objects.select_related("union__chamber__county", "category"), pk=pk, is_active=True
     )
     lat, lng = request.query_params.get("lat"), request.query_params.get("lng")
-    offers = services.visible_offers().filter(product=p).select_related("store", "product")
-    rows = [_offer_row(o, request, lat, lng) for o in offers]
+    offers = list(services.visible_offers().filter(product=p).select_related("store", "product"))
+    shop_counts = _shop_counts([o.store_id for o in offers])
+    rows = [_offer_row(o, request, lat, lng, shop_counts=shop_counts) for o in offers]
     # مرتب‌سازی: کمترین قیمت، سپس نزدیک‌ترین، سپس امتیاز بالاتر
     rows.sort(key=lambda r: (r["price"], r["distance_km"] if r["distance_km"] is not None else 1e9, -float(r["store"]["rating_avg"])))
     if request.query_params.get("sort") == "distance" and lat:
@@ -379,8 +394,11 @@ def public_map(request):
         qs = qs.filter(union__chamber__county_id=county)
     if union := request.query_params.get("union"):
         qs = qs.filter(union_id=union)
+    stores = list(qs[:2000])
+    shop_counts = _shop_counts([s.pk for s in stores])
     return Response([
         {"id": s.pk, "name": s.name, "lat": s.lat, "lng": s.lng, "union_name": s.union.name,
-         "rating_avg": s.rating_avg, "is_verified": s.is_verified}
-        for s in qs[:2000]
+         "rating_avg": s.rating_avg, "is_verified": s.is_verified,
+         "shop_products": shop_counts.get(s.pk, 0)}
+        for s in stores
     ])

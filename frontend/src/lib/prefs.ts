@@ -12,22 +12,34 @@ function read<T>(key: string, fallback: T): T {
 
 export function usePref<T>(key: string, fallback: T) {
   const [value, setValue] = useState<T>(() => read(key, fallback));
+  // وابستگی به رشته JSON (نه خود شیء) تا تغییر صرفِ مرجعِ شیء باعث اجرای دوباره نشود
+  const serialized = JSON.stringify(value);
+
   useEffect(() => {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      if (localStorage.getItem(key) === serialized) return; // چیزی عوض نشده
+      localStorage.setItem(key, serialized);
     } catch {
-      /* ignore */
+      return; // حالت خصوصی مرورگر
     }
     window.dispatchEvent(new CustomEvent("nb:pref", { detail: key }));
-  }, [key, value]);
+  }, [key, serialized]);
+
+  // همگام‌سازی بین کامپوننت‌هایی که همین کلید را می‌خوانند. اگر مقدار جدید با مقدار
+  // فعلی یکی باشد همان مرجع قبلی برگردانده می‌شود تا رندر بی‌دلیل و حلقه بی‌نهایت رخ ندهد.
   useEffect(() => {
     const on = (e: Event) => {
-      if ((e as CustomEvent).detail === key) setValue(read(key, fallback));
+      if ((e as CustomEvent).detail !== key) return;
+      setValue((prev) => {
+        const next = read(key, fallback);
+        return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+      });
     };
     window.addEventListener("nb:pref", on);
     return () => window.removeEventListener("nb:pref", on);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+
   return [value, setValue] as const;
 }
 

@@ -10,6 +10,7 @@ from apps.accounts import api as accounts
 from apps.analytics import api as analytics
 from apps.cms import api as cms
 from apps.complaints import api as complaints
+from apps.core import backup_api
 from apps.distribution import api as distribution
 from apps.market import api as market
 from apps.observatory import api as observatory
@@ -78,6 +79,10 @@ api = [
     path("analytics/basket/", analytics.basket_report),
     path("analytics/distribution/", analytics.distribution_report),
     path("analytics/export/<str:name>/", analytics.export),
+    path("backup/status/", backup_api.status),
+    path("backup/download/", backup_api.download),
+    path("backup/inspect/", backup_api.inspect),
+    path("backup/restore/", backup_api.restore),
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("docs/", SpectacularSwaggerView.as_view(url_name="schema")),
     path("", include(router.urls)),

@@ -31,6 +31,7 @@ const Reports = lazy(() => import("./pages/panel/Reports"));
 const CommodityReports = lazy(() => import("./pages/panel/CommodityReports"));
 const Org = lazy(() => import("./pages/panel/Org"));
 const Slides = lazy(() => import("./pages/panel/Slides"));
+const Backup = lazy(() => import("./pages/panel/Backup"));
 const StoreProfile = lazy(() => import("./pages/panel/StoreProfile"));
 const MyShop = lazy(() => import("./pages/panel/MyShop"));
 const Orders = lazy(() => import("./pages/panel/Orders"));
@@ -89,6 +90,7 @@ export default function App() {
           <Route path="observatory" element={<RequireAuth roles={["governorate", "chamber", "union"]}><CommodityReports /></RequireAuth>} />
           <Route path="org/:entity" element={<RequireAuth roles={["governorate", "chamber"]}><Org /></RequireAuth>} />
           <Route path="slides" element={<RequireAuth roles={[]}><Slides /></RequireAuth>} />
+          <Route path="backup" element={<RequireAuth roles={[]}><Backup /></RequireAuth>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

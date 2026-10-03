@@ -2,6 +2,7 @@
 from datetime import timedelta
 
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -434,3 +435,51 @@ class OrderTests(Base):
         r = self._place(delivery="delivery")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(self._place(delivery="delivery", address="همدان، خیابان اول").status_code, 201)
+
+
+class BackupTests(Base):
+    """پشتیبان‌گیری و بازیابی — فقط مدیر کل."""
+
+    def test_only_admin_can_use_backup(self):
+        for user in (self.gov, self.cham, self.uni, self.citizen):
+            self.assertEqual(self.client_for(user).get("/api/backup/status/").status_code, 403, user.role)
+        self.assertEqual(self.client_for(self.admin).get("/api/backup/status/").status_code, 200)
+
+    def test_backup_download_and_restore_recovers_deleted_rows(self):
+        from apps.shop.models import ShopProduct
+
+        ShopProduct.objects.create(store=self.stores[0], name="کالای مهم", price=123_000)
+        c = self.client_for(self.admin)
+
+        r = c.get("/api/backup/download/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "application/zip")
+        archive = r.content
+
+        # حذف عمدی و سپس بازیابی
+        ShopProduct.objects.all().delete()
+        self.stores[0].refresh_from_db()
+        self.assertEqual(ShopProduct.objects.count(), 0)
+
+        upload = SimpleUploadedFile("b.zip", archive, content_type="application/zip")
+        r = c.post("/api/backup/restore/", {"file": upload, "confirm": "true"}, format="multipart")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(ShopProduct.objects.filter(name="کالای مهم").count(), 1)
+
+    def test_restore_requires_confirmation_and_valid_file(self):
+        c = self.client_for(self.admin)
+        archive = c.get("/api/backup/download/").content
+        no_confirm = SimpleUploadedFile("b.zip", archive, content_type="application/zip")
+        self.assertEqual(c.post("/api/backup/restore/", {"file": no_confirm}, format="multipart").status_code, 400)
+        junk = SimpleUploadedFile("x.zip", b"not a zip", content_type="application/zip")
+        self.assertEqual(
+            c.post("/api/backup/restore/", {"file": junk, "confirm": "true"}, format="multipart").status_code, 400
+        )
+
+    def test_inspect_reports_contents(self):
+        c = self.client_for(self.admin)
+        archive = c.get("/api/backup/download/").content
+        upload = SimpleUploadedFile("b.zip", archive, content_type="application/zip")
+        info = c.post("/api/backup/inspect/", {"file": upload}, format="multipart").data
+        self.assertEqual(info["version"], 1)
+        self.assertEqual(info["counts"]["orgs.store"], Store.objects.count())

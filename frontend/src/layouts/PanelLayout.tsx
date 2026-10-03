@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle, BarChart3, Bell, Boxes, Building2, ClipboardList, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
+  AlertTriangle, BarChart3, Bell, Boxes, Building2, ClipboardList, DatabaseBackup, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
   Package, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
@@ -38,6 +38,7 @@ export const NAV: Item[] = [
   { to: "/panel/org/commodities", label: "کالاهای اساسی و سبد", icon: ClipboardList, roles: [] },
   { to: "/panel/org/categories", label: "دسته‌بندی‌ها", icon: Settings2, roles: [] },
   { to: "/panel/slides", label: "اسلایدهای صفحه اصلی", icon: GalleryHorizontal, roles: [] },
+  { to: "/panel/backup", label: "پشتیبان‌گیری و بازیابی", icon: DatabaseBackup, roles: [] },
   { to: "/panel/profile", label: "مشخصات فروشگاه", icon: Settings2, roles: ["store"] },
 ];
 

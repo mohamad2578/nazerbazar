@@ -18,7 +18,8 @@ from django.apps import apps
 from django.conf import settings
 from django.core import serializers
 from django.core.management import call_command
-from django.db import transaction
+from django.core.management.color import no_style
+from django.db import connection, transaction
 
 FORMAT_VERSION = 1
 
@@ -27,6 +28,21 @@ APP_LABELS = ["accounts", "orgs", "market", "shop", "complaints", "observatory",
 
 # این مدل‌ها لاگ/موقتی هستند و به پشتیبان نیازی ندارند
 EXCLUDED_MODELS = {"accounts.otp", "accounts.notification"}
+
+
+def reset_sequences() -> int:
+    """هم‌ترازکردن شمارنده شناسه جدول‌ها با بزرگ‌ترین شناسه موجود.
+
+    بازیابی پشتیبان، رکوردها را با شناسه مشخص درج می‌کند و در PostgreSQL شمارنده
+    (sequence) جدول عقب می‌ماند؛ در نتیجه اولین رکورد جدید با خطای «duplicate key»
+    شکست می‌خورد. این تابع بعد از هر بازیابی شمارنده‌ها را درست می‌کند.
+    """
+    models = [m for label in APP_LABELS for m in apps.get_app_config(label).get_models()]
+    statements = connection.ops.sequence_reset_sql(no_style(), models)
+    with connection.cursor() as cursor:
+        for sql in statements:
+            cursor.execute(sql)
+    return len(statements)
 
 
 def _models():
@@ -122,8 +138,10 @@ def restore(file, with_media: bool = True) -> dict:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(zf.read(name))
                 media_count += 1
+    sequences = reset_sequences()
     return {
         "restored": restored,
+        "sequences": sequences,
         "media_files": media_count,
         "counts": counts(),
         "snapshot": snapshot.name,

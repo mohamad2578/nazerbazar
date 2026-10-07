@@ -20,7 +20,8 @@ const UNITS = [["kg", "کیلوگرم"], ["g", "گرم"], ["piece", "عدد"], [
 
 export default function Products() {
   const { user } = useAuth();
-  const canEdit = user!.role === "union" || user!.role === "admin";
+  // اتحادیه، اداره صمت، اتاق اصناف و مدیر کل می‌توانند کالا تعریف و نرخ‌گذاری کنند
+  const canEdit = ["union", "samt", "chamber", "admin"].includes(user!.role);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<ProductT | "new" | null>(null);
@@ -30,7 +31,13 @@ export default function Products() {
     <div className="space-y-4">
       <PageHeader
         title="کالاها و نرخ مصوب"
-        subtitle={canEdit ? "تغییر نرخ به فروشگاه‌ها اعلان می‌شود و آن‌ها ۲۴ ساعت برای به‌روزرسانی مهلت دارند." : undefined}
+        subtitle={
+          user!.role === "union"
+            ? "نرخی که ثبت می‌کنید پس از تایید اتاق اصناف اعمال می‌شود."
+            : canEdit
+              ? "تعریف کالا برای هر اتحادیه و نرخ‌گذاری؛ نرخ شما بی‌درنگ اعمال می‌شود."
+              : undefined
+        }
         actions={<>
           <Button variant="secondary" size="sm" icon={<Download className="size-4" />} onClick={() => download("/analytics/export/prices/", "prices.xlsx")}>اکسل</Button>
           {canEdit && <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setEditing("new")}>کالای جدید</Button>}
@@ -91,7 +98,13 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
   const toast = useToast();
   const cats = useQuery({ queryKey: ["categories"], queryFn: () => api.get<{ id: number; name: string }[]>("/categories/") });
   const coms = useQuery({ queryKey: ["commodities"], queryFn: () => api.get<{ id: number; name: string }[]>("/commodities/") });
-  const unions = useQuery({ queryKey: ["unions-all"], queryFn: () => api.get<Page<{ id: number; name: string }>>("/unions/", { page_size: 200 }), enabled: user!.role === "admin" });
+  // اتحادیه را فقط نقش‌های بالادستی انتخاب/تغییر می‌دهند؛ اتحادیه کالا را زیر نام خودش می‌سازد
+  const canPickUnion = user!.role !== "union";
+  const unions = useQuery({
+    queryKey: ["unions-all"],
+    queryFn: () => api.get<Page<{ id: number; name: string; county_name?: string }>>("/unions/", { page_size: 300 }),
+    enabled: canPickUnion,
+  });
   const [f, setF] = useState({
     name: product?.name ?? "", unit: product?.unit ?? "kg", unit_amount: product?.unit_amount ?? "1", category: product?.category ?? "",
     commodity: product?.commodity ?? "", description: product?.description ?? "", max_discount_percent: product?.max_discount_percent ?? 20,
@@ -126,9 +139,19 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
           </div>
         </Field>
         <Field label="نام کالا" error={err.name} className="sm:col-span-2"><Input value={f.name} onChange={set("name")} /></Field>
-        {user!.role === "admin" && !product && (
-          <Field label="اتحادیه" error={err.union} className="sm:col-span-2">
-            <Select value={String(f.union)} onChange={set("union")}><option value="">—</option>{unions.data?.results.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>
+        {canPickUnion && (
+          <Field
+            label="اتحادیه"
+            error={err.union}
+            className="sm:col-span-2"
+            hint={product ? "با تغییر اتحادیه، این کالا به اتحادیه دیگری منتقل می‌شود." : "کالا زیر این اتحادیه تعریف می‌شود."}
+          >
+            <Select value={String(f.union)} onChange={set("union")}>
+              <option value="">— انتخاب اتحادیه —</option>
+              {unions.data?.results.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}{u.county_name ? ` (${u.county_name})` : ""}</option>
+              ))}
+            </Select>
           </Field>
         )}
         <Field label="واحد"><Select value={f.unit} onChange={set("unit")}>{UNITS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>

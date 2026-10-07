@@ -11,23 +11,23 @@ import { ago, num } from "../../lib/format";
 type FieldDef = { key: string; label: string; type?: "text" | "number" | "select" | "checkbox" | "password"; options?: string; choices?: [string, string][]; showIf?: (f: any) => boolean };
 type Entity = { title: string; url: string; paginated: boolean; columns: { key: string; label: string; render?: (r: any) => React.ReactNode }[]; fields: FieldDef[]; canDelete?: boolean; roles: Role[] };
 
-const ROLE_CHOICES: [string, string][] = [["governorate", "استانداری"], ["chamber", "اتاق اصناف"], ["union", "اتحادیه"], ["admin", "مدیر کل"]];
+const ROLE_CHOICES: [string, string][] = [["governorate", "استانداری"], ["samt", "اداره صمت"], ["chamber", "اتاق اصناف"], ["union", "اتحادیه"], ["admin", "مدیر کل"]];
 
 const ENTITIES: Record<string, Entity> = {
   provinces: { title: "استان‌ها", url: "/provinces/", paginated: true, roles: [], columns: [{ key: "name", label: "نام" }, { key: "is_active", label: "فعال", render: (r) => (r.is_active ? "✓" : "—") }],
     fields: [{ key: "name", label: "نام استان" }, { key: "lat", label: "عرض جغرافیایی" }, { key: "lng", label: "طول جغرافیایی" }, { key: "is_active", label: "فعال", type: "checkbox" }] },
-  counties: { title: "شهرستان‌ها", url: "/counties/", paginated: true, roles: ["governorate"], columns: [{ key: "name", label: "نام" }, { key: "province_name", label: "استان" }, { key: "population", label: "جمعیت", render: (r) => num(r.population) }],
+  counties: { title: "شهرستان‌ها", url: "/counties/", paginated: true, roles: ["governorate", "samt"], columns: [{ key: "name", label: "نام" }, { key: "province_name", label: "استان" }, { key: "population", label: "جمعیت", render: (r) => num(r.population) }],
     fields: [{ key: "province", label: "استان", type: "select", options: "/provinces/" }, { key: "name", label: "نام شهرستان" }, { key: "population", label: "جمعیت", type: "number" }, { key: "lat", label: "عرض جغرافیایی" }, { key: "lng", label: "طول جغرافیایی" }] },
-  chambers: { title: "اتاق‌های اصناف", url: "/chambers/", paginated: true, roles: ["governorate"], columns: [{ key: "name", label: "عنوان" }, { key: "county_name", label: "شهرستان" }, { key: "unions_count", label: "اتحادیه", render: (r) => num(r.unions_count) }],
+  chambers: { title: "اتاق‌های اصناف", url: "/chambers/", paginated: true, roles: ["governorate", "samt"], columns: [{ key: "name", label: "عنوان" }, { key: "county_name", label: "شهرستان" }, { key: "unions_count", label: "اتحادیه", render: (r) => num(r.unions_count) }],
     fields: [{ key: "county", label: "شهرستان", type: "select", options: "/counties/" }, { key: "name", label: "عنوان" }, { key: "phone", label: "تلفن" }, { key: "address", label: "نشانی" }] },
-  unions: { title: "اتحادیه‌ها", url: "/unions/", paginated: true, roles: ["governorate", "chamber"], columns: [{ key: "name", label: "عنوان" }, { key: "guild", label: "رسته" }, { key: "chamber_name", label: "اتاق اصناف" }, { key: "is_active", label: "وضعیت", render: (r) => <Badge tone={r.is_active ? "ok" : "neutral"}>{r.is_active ? "فعال" : "غیرفعال"}</Badge> }],
+  unions: { title: "اتحادیه‌ها", url: "/unions/", paginated: true, roles: ["governorate", "samt", "chamber"], columns: [{ key: "name", label: "عنوان" }, { key: "guild", label: "رسته" }, { key: "chamber_name", label: "اتاق اصناف" }, { key: "is_active", label: "وضعیت", render: (r) => <Badge tone={r.is_active ? "ok" : "neutral"}>{r.is_active ? "فعال" : "غیرفعال"}</Badge> }],
     fields: [{ key: "chamber", label: "اتاق اصناف", type: "select", options: "/chambers/" }, { key: "name", label: "عنوان اتحادیه" }, { key: "guild", label: "رسته صنفی" }, { key: "phone", label: "تلفن" }, { key: "address", label: "نشانی" }, { key: "is_active", label: "فعال", type: "checkbox" }] },
-  users: { title: "کاربران سازمانی", url: "/users/", paginated: true, canDelete: true, roles: ["governorate", "chamber"],
+  users: { title: "کاربران سازمانی", url: "/users/", paginated: true, canDelete: true, roles: ["governorate", "samt", "chamber"],
     columns: [{ key: "mobile", label: "موبایل" }, { key: "name", label: "نام", render: (r) => `${r.first_name} ${r.last_name}` }, { key: "role_display", label: "نقش" }, { key: "scope_name", label: "حوزه" }, { key: "last_login", label: "آخرین ورود", render: (r) => ago(r.last_login) || "—" }, { key: "is_active", label: "فعال", render: (r) => (r.is_active ? "✓" : "—") }],
     fields: [
       { key: "mobile", label: "موبایل" }, { key: "first_name", label: "نام" }, { key: "last_name", label: "نام خانوادگی" },
       { key: "role", label: "نقش", type: "select", choices: ROLE_CHOICES },
-      { key: "province", label: "استان", type: "select", options: "/provinces/", showIf: (f) => f.role === "governorate" },
+      { key: "province", label: "استان", type: "select", options: "/provinces/", showIf: (f) => f.role === "governorate" || f.role === "samt" },
       { key: "chamber", label: "اتاق اصناف", type: "select", options: "/chambers/", showIf: (f) => f.role === "chamber" },
       { key: "union", label: "اتحادیه", type: "select", options: "/unions/", showIf: (f) => f.role === "union" },
       { key: "password", label: "رمز عبور (اختیاری؛ ورود با پیامک همیشه فعال است)", type: "password" },

@@ -94,7 +94,7 @@ export default function App() {
           <Route path="alerts" element={<RequireAuth roles={MANAGERS}><Alerts /></RequireAuth>} />
           <Route path="reports" element={<RequireAuth roles={MANAGERS}><Reports /></RequireAuth>} />
           <Route path="observatory" element={<RequireAuth roles={["governorate", "chamber", "union"]}><CommodityReports /></RequireAuth>} />
-          <Route path="org/:entity" element={<RequireAuth roles={["governorate", "chamber"]}><Org /></RequireAuth>} />
+          <Route path="org/:entity" element={<RequireAuth roles={["governorate", "samt", "chamber"]}><Org /></RequireAuth>} />
           <Route path="slides" element={<RequireAuth roles={[]}><Slides /></RequireAuth>} />
           <Route path="backup" element={<RequireAuth roles={[]}><Backup /></RequireAuth>} />
         </Route>

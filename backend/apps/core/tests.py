@@ -611,3 +611,62 @@ class SamtAndPriceApprovalTests(Base):
             c.post("/api/users/", {"mobile": "09125550002", "role": "governorate", "province": self.prov.pk}).status_code,
             400,
         )
+
+
+class SamtManagementTests(Base):
+    """اداره صمت: مدیریت اتحادیه‌ها و مدیریت کامل کالاها."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000007", role=Role.SAMT, province=cls.prov)
+        cls.samt_other = User.objects.create_user("09120000008", role=Role.SAMT, province=cls.prov2)
+
+    def test_samt_creates_and_edits_unions_and_chambers(self):
+        c = self.client_for(self.samt)
+        r = c.post("/api/chambers/", {"county": self.county.pk, "name": "اتاق اصناف جدید"})
+        self.assertEqual(r.status_code, 201, r.data)
+        chamber_id = r.data["id"]
+        r = c.post("/api/unions/", {"chamber": chamber_id, "name": "اتحادیه نانوایان", "guild": "نان"})
+        self.assertEqual(r.status_code, 201, r.data)
+        union_id = r.data["id"]
+        r = c.patch(f"/api/unions/{union_id}/", {"name": "اتحادیه نانوایان سنتی", "is_active": False})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(Union.objects.get(pk=union_id).name, "اتحادیه نانوایان سنتی")
+        # اتحادیه استان دیگر برای این صمت قابل دیدن/ویرایش نیست
+        self.assertEqual(self.client_for(self.samt_other).get(f"/api/unions/{union_id}/").status_code, 404)
+
+    def test_samt_creates_product_for_a_union_and_can_reassign_it(self):
+        c = self.client_for(self.samt)
+        second = Union.objects.create(chamber=self.chamber, name="اتحادیه دوم")
+        r = c.post("/api/products/", {"name": "شکر", "unit": "kg", "union": self.union.pk, "initial_price": 900_000})
+        self.assertEqual(r.status_code, 201, r.data)
+        pid = r.data["id"]
+        p = Product.objects.get(pk=pid)
+        # نرخ اداره صمت بدون نیاز به تایید اعمال می‌شود
+        self.assertEqual((p.union_id, p.current_price), (self.union.pk, 900_000))
+        # تخصیص کالا به اتحادیه دیگر
+        r = c.patch(f"/api/products/{pid}/", {"union": second.pk})
+        self.assertEqual(r.status_code, 200, r.data)
+        p.refresh_from_db()
+        self.assertEqual(p.union_id, second.pk)
+        # غیرفعال‌سازی کالا
+        self.assertEqual(c.delete(f"/api/products/{pid}/").status_code, 204)
+        p.refresh_from_db()
+        self.assertFalse(p.is_active)
+
+    def test_samt_cannot_touch_products_outside_province(self):
+        foreign = Product.objects.create(union=self.other_union, name="بیرونی", current_price=100)
+        c = self.client_for(self.samt)
+        self.assertEqual(c.get(f"/api/products/{foreign.pk}/").status_code, 404)
+        self.assertEqual(c.patch(f"/api/products/{foreign.pk}/", {"name": "x"}).status_code, 404)
+        # و نمی‌تواند کالا را به اتحادیه خارج از حوزه خود منتقل کند
+        mine = Product.objects.create(union=self.union, name="مال من", current_price=100)
+        self.assertEqual(c.patch(f"/api/products/{mine.pk}/", {"union": self.other_union.pk}).status_code, 403)
+
+    def test_union_cannot_move_its_product_to_another_union(self):
+        second = Union.objects.create(chamber=self.chamber, name="اتحادیه سوم")
+        r = self.client_for(self.uni).patch(f"/api/products/{self.product.pk}/", {"union": second.pk})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.union_id, self.union.pk)  # تغییری نکرده

@@ -74,7 +74,12 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(ScopedModelViewSet):
-    """تعریف کالا و نرخ‌گذاری توسط اتحادیه"""
+    """تعریف و مدیریت کالا و نرخ‌گذاری.
+
+    اتحادیه فقط کالاهای خودش را می‌سازد و ویرایش می‌کند؛ اداره صمت، اتاق اصناف و
+    مدیر کل می‌توانند کالا را برای هر اتحادیه در حوزه خود تعریف کنند و اتحادیهٔ
+    یک کالا را هم تغییر دهند.
+    """
 
     serializer_class = ProductSerializer
     read_roles = ("governorate", "samt", "chamber", "union")
@@ -106,7 +111,9 @@ class ProductViewSet(ScopedModelViewSet):
 
     def perform_update(self, serializer):
         serializer.validated_data.pop("initial_price", None)
-        serializer.validated_data.pop("union", None)
+        # اتحادیه نمی‌تواند کالای خود را به اتحادیه دیگری منتقل کند
+        if self.request.user.role == Role.UNION:
+            serializer.validated_data.pop("union", None)
         self._save_in_scope(serializer)
 
     def perform_destroy(self, instance):

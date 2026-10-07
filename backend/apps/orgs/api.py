@@ -96,7 +96,7 @@ class CountyViewSet(ScopedModelViewSet):
     queryset = County.objects.select_related("province")
     serializer_class = CountySerializer
     read_roles = ("governorate", "samt", "chamber")
-    write_roles = ("governorate",)
+    write_roles = ("governorate", "samt")
     filterset_fields = ["province"]
     search_fields = ["name"]
 
@@ -105,7 +105,7 @@ class ChamberViewSet(ScopedModelViewSet):
     queryset = Chamber.objects.select_related("county")
     serializer_class = ChamberSerializer
     read_roles = ("governorate", "samt", "chamber")
-    write_roles = ("governorate",)
+    write_roles = ("governorate", "samt")
     filterset_fields = ["county"]
     search_fields = ["name"]
 

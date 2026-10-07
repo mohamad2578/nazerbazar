@@ -670,3 +670,69 @@ class SamtManagementTests(Base):
         self.assertEqual(r.status_code, 200, r.data)
         self.product.refresh_from_db()
         self.assertEqual(self.product.union_id, self.union.pk)  # تغییری نکرده
+
+
+class SamtStoreManagementTests(Base):
+    """اداره صمت: تعریف فروشگاه، ویرایش مشخصات و بازنشانی رمز عبور مالک."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000011", role=Role.SAMT, province=cls.prov)
+        cls.samt_other = User.objects.create_user("09120000012", role=Role.SAMT, province=cls.prov2)
+
+    def _new_store(self, client=None, **over):
+        body = {"union": self.union.pk, "name": "فروشگاه صمت", "address": "همدان، میدان بوعلی",
+                "owner_mobile": "09351112233", "owner_first_name": "رضا", "owner_last_name": "کریمی",
+                "password": "storepass123"}
+        body.update(over)
+        return (client or self.client_for(self.samt)).post("/api/stores/", body)
+
+    def test_samt_creates_an_active_store_with_its_owner_account(self):
+        r = self._new_store()
+        self.assertEqual(r.status_code, 201, r.data)
+        store = Store.objects.get(pk=r.data["id"])
+        self.assertEqual(store.status, Store.Status.ACTIVE)
+        self.assertEqual(store.reviewed_by, self.samt)
+        owner = store.owner
+        self.assertEqual((owner.mobile, owner.role, owner.first_name), ("09351112233", Role.STORE, "رضا"))
+        self.assertTrue(owner.check_password("storepass123"))
+        # مالک می‌تواند بلافاصله وارد پنل شود
+        self.assertEqual(self.client.post("/api/auth/login/",
+                         {"mobile": "09351112233", "password": "storepass123"}).status_code, 200)
+
+    def test_samt_edits_store_details_and_owner_mobile(self):
+        store = Store.objects.get(pk=self._new_store().data["id"])
+        c = self.client_for(self.samt)
+        r = c.patch(f"/api/stores/{store.pk}/", {"name": "هایپر صمت", "phone": "08134000000",
+                                                 "owner_mobile": "09351119999", "owner_last_name": "کریمی‌نژاد"})
+        self.assertEqual(r.status_code, 200, r.data)
+        store.refresh_from_db()
+        store.owner.refresh_from_db()
+        self.assertEqual(store.name, "هایپر صمت")
+        self.assertEqual((store.owner.mobile, store.owner.last_name), ("09351119999", "کریمی‌نژاد"))
+        self.assertEqual(r.data["owner_mobile"], "09351119999")
+
+    def test_samt_resets_store_password(self):
+        store = Store.objects.get(pk=self._new_store().data["id"])
+        c = self.client_for(self.samt)
+        self.assertEqual(c.post(f"/api/stores/{store.pk}/set_password/", {"password": "123"}).status_code, 400)
+        r = c.post(f"/api/stores/{store.pk}/set_password/", {"password": "tazeh-ramz-1404"})
+        self.assertEqual(r.status_code, 200, r.data)
+        store.owner.refresh_from_db()
+        self.assertTrue(store.owner.check_password("tazeh-ramz-1404"))
+
+    def test_duplicate_owner_mobile_and_out_of_scope_union_are_rejected(self):
+        self._new_store()
+        self.assertEqual(self._new_store().status_code, 400)
+        # اتحادیه خارج از استان این صمت
+        other_union = Union.objects.create(
+            chamber=Chamber.objects.create(county=County.objects.create(province=self.prov2, name="ملایر"),
+                                           name="اتاق دیگر"), name="اتحادیه دیگر")
+        r = self._new_store(union=other_union.pk, owner_mobile="09351114444")
+        self.assertIn(r.status_code, (400, 403))
+
+    def test_union_can_also_create_a_store_but_only_in_its_own_union(self):
+        r = self._new_store(self.client_for(self.uni), owner_mobile="09351115555")
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(Store.objects.get(pk=r.data["id"]).union, self.union)

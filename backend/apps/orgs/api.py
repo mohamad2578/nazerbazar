@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -6,6 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.models import Role, User, notify
+from apps.core.utils import normalize_mobile
 from apps.core.views import ScopedModelViewSet
 
 from .models import Chamber, County, Province, Store, Union
@@ -71,6 +73,33 @@ class StoreSerializer(serializers.ModelSerializer):
         return s.offers.count()
 
 
+class StoreAdminSerializer(StoreSerializer):
+    """ساخت و ویرایش فروشگاه توسط اتحادیه/اتاق اصناف/اداره صمت/استانداری.
+
+    مشخصات مالک (موبایل، نام و رمز عبور) همراه خود فروشگاه مدیریت می‌شود تا مسئول
+    بتواند فروشگاهی را که حضوری ثبت‌نام کرده مستقیم در سامانه تعریف کند.
+    """
+
+    owner_mobile = serializers.CharField(write_only=True, required=False)
+    owner_first_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    owner_last_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta(StoreSerializer.Meta):
+        fields = StoreSerializer.Meta.fields + ["owner_first_name", "owner_last_name", "password"]
+
+    def validate_owner_mobile(self, v):
+        return normalize_mobile(v)
+
+    def to_representation(self, instance):
+        # فیلدهای write_only در خروجی نمی‌آیند؛ مقدار فعلی مالک را دستی برمی‌گردانیم
+        data = super().to_representation(instance)
+        data["owner_mobile"] = instance.owner.mobile
+        data["owner_first_name"] = instance.owner.first_name
+        data["owner_last_name"] = instance.owner.last_name
+        return data
+
+
 class StoreRegisterSerializer(StoreSerializer):
     first_name = serializers.CharField(write_only=True)
     last_name = serializers.CharField(write_only=True)
@@ -132,8 +161,84 @@ class StoreViewSet(ScopedModelViewSet):
     search_fields = ["name", "address", "owner__mobile", "license_no"]
     ordering_fields = ["created_at", "name", "rating_avg"]
 
-    def create(self, request, *args, **kwargs):
-        raise ValidationError({"detail": "فروشگاه‌ها از طریق فرم ثبت‌نام ایجاد می‌شوند."})
+    def get_serializer_class(self):
+        return StoreAdminSerializer if self.request.method in ("POST", "PATCH") else StoreSerializer
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        """تعریف مستقیم فروشگاه توسط مسئول؛ حساب مالک هم همین‌جا ساخته می‌شود."""
+        data = serializer.validated_data
+        mobile = data.pop("owner_mobile", None)
+        if not mobile:
+            raise ValidationError({"owner_mobile": "شماره موبایل مالک فروشگاه را وارد کنید."})
+        password = data.pop("password", "")
+        first = data.pop("owner_first_name", "")
+        last = data.pop("owner_last_name", "")
+
+        owner = User.objects.filter(mobile=mobile).first()
+        if owner and owner.stores.exists():
+            raise ValidationError({"owner_mobile": "این شماره قبلا برای فروشگاه دیگری ثبت شده است."})
+        if owner and owner.role not in (Role.CITIZEN, Role.STORE):
+            raise ValidationError({"owner_mobile": "این شماره متعلق به یک کاربر سازمانی است."})
+        if not owner:
+            owner = User.objects.create_user(mobile, password=password or None)
+        if first or last:
+            owner.first_name, owner.last_name = first or owner.first_name, last or owner.last_name
+        owner.role = Role.STORE
+        if password:
+            owner.set_password(password)
+        owner.save()
+
+        # فروشگاهی که مسئول خودش تعریف می‌کند از همان ابتدا فعال است
+        store = self._save_in_scope(
+            serializer, owner=owner, status=Store.Status.ACTIVE,
+            reviewed_by=self.request.user, reviewed_at=timezone.now(),
+        )
+        notify([owner], "فروشگاه شما ثبت شد",
+               f"فروشگاه «{store.name}» توسط {self.request.user.get_role_display()} در سامانه ثبت و فعال شد.",
+               "/panel")
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        """ویرایش مشخصات فروشگاه و در صورت نیاز، مشخصات و رمز مالک."""
+        data = serializer.validated_data
+        mobile = data.pop("owner_mobile", None)
+        password = data.pop("password", "")
+        first = data.pop("owner_first_name", None)
+        last = data.pop("owner_last_name", None)
+        store = self._save_in_scope(serializer)
+
+        owner = store.owner
+        changed = []
+        if mobile and mobile != owner.mobile:
+            if User.objects.filter(mobile=mobile).exclude(pk=owner.pk).exists():
+                raise ValidationError({"owner_mobile": "این شماره قبلا در سامانه ثبت شده است."})
+            owner.mobile, changed = mobile, changed + ["mobile"]
+        if first is not None:
+            owner.first_name, changed = first, changed + ["first_name"]
+        if last is not None:
+            owner.last_name, changed = last, changed + ["last_name"]
+        if password:
+            owner.set_password(password)
+            changed.append("password")
+        if changed:
+            owner.save()
+            if "password" in changed:
+                notify([owner], "رمز عبور حساب شما تغییر کرد",
+                       "رمز ورود فروشگاه شما توسط مسئول مربوط تغییر داده شد.", "/panel")
+
+    @action(detail=True, methods=["post"])
+    def set_password(self, request, pk=None):
+        """تعیین یا بازنشانی رمز عبور مالک فروشگاه."""
+        store = self.get_object()
+        password = (request.data.get("password") or "").strip()
+        if len(password) < 8:
+            raise ValidationError({"password": "رمز عبور باید حداقل ۸ کاراکتر باشد."})
+        store.owner.set_password(password)
+        store.owner.save(update_fields=["password"])
+        notify([store.owner], "رمز عبور حساب شما تغییر کرد",
+               "رمز ورود فروشگاه شما توسط مسئول مربوط تغییر داده شد.", "/panel")
+        return Response({"ok": True, "mobile": store.owner.mobile})
 
     def _set(self, request, new_status, need_reason=False):
         store = self.get_object()

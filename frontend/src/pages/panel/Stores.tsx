@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, Download, Phone, Search } from "lucide-react";
+import { BadgeCheck, Download, KeyRound, Pencil, Phone, Plus, Search } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Badge, Button, Card, DataTable, Empty, Field, Input, Loading, PageHeader, Segmented, Sheet, STATUS_TONE, Textarea, useToast } from "../../components/ui";
+import { Badge, Button, Card, DataTable, Empty, Field, Input, Loading, PageHeader, Segmented, Select, Sheet, STATUS_TONE, Textarea, useToast } from "../../components/ui";
+import { fieldErrors } from "../../lib/api";
 import { api, download, type Page } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { date, num, telLink } from "../../lib/format";
@@ -13,7 +14,11 @@ type StoreT = {
   id: number; name: string; union_name: string; county_name: string; license_no: string; phone: string; address: string;
   status: string; status_display: string; status_reason: string; is_verified: boolean; rating_avg: string; owner_name: string;
   owner_mobile: string; offers_count: number; created_at: string; license_image: string | null; lat: string; lng: string;
+  union?: number; working_hours?: string;
 };
+
+/** نقش‌هایی که اجازه تعریف و مدیریت فروشگاه دارند. */
+const MANAGER_ROLES = ["union", "chamber", "samt", "governorate", "admin"];
 
 export default function Stores() {
   const { user } = useAuth();
@@ -23,13 +28,19 @@ export default function Stores() {
   const [page, setPage] = useState(1);
   const [sel, setSel] = useState<StoreT | null>(null);
   const q = useQuery({ queryKey: ["stores", status, search, page], queryFn: () => api.get<Page<StoreT>>("/stores/", { status, search, page }) });
-  const canManage = user!.role === "union" || user!.role === "admin";
+  const [creating, setCreating] = useState(false);
+  const canManage = MANAGER_ROLES.includes(user!.role);
   return (
     <div className="space-y-4">
       <PageHeader
         title={canManage ? "کارتابل فروشگاه‌ها" : "فروشگاه‌ها"}
         subtitle={canManage ? "درخواست‌های فعال‌سازی را بررسی و فروشگاه‌های عضو را مدیریت کنید." : undefined}
-        actions={<Button variant="secondary" size="sm" icon={<Download className="size-4" />} onClick={() => download("/analytics/export/stores/", "stores.xlsx")}>اکسل</Button>}
+        actions={
+          <span className="flex gap-2">
+            <Button variant="secondary" size="sm" icon={<Download className="size-4" />} onClick={() => download("/analytics/export/stores/", "stores.xlsx")}>اکسل</Button>
+            {canManage && <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>فروشگاه جدید</Button>}
+          </span>
+        }
       />
       <div className="flex flex-col gap-2 sm:flex-row">
         <Segmented value={status} onChange={(v) => { setParams(v ? { status: v } : {}); setPage(1); }} options={[
@@ -64,12 +75,15 @@ export default function Stores() {
         </div>
       )}
       {sel && <StoreSheet store={sel} canManage={canManage} onClose={() => setSel(null)} />}
+      {creating && <StoreForm onClose={() => setCreating(false)} />}
     </div>
   );
 }
 
 function StoreSheet({ store, canManage, onClose }: { store: StoreT; canManage: boolean; onClose: () => void }) {
   const [reason, setReason] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [pwd, setPwd] = useState("");
   const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(
     store.lat ? { lat: +store.lat, lng: +store.lng } : null,
   );
@@ -96,6 +110,12 @@ function StoreSheet({ store, canManage, onClose }: { store: StoreT; canManage: b
     },
     onError: (e: Error) => toast(e.message, "danger"),
   });
+  const setPassword = useMutation({
+    mutationFn: () => api.post(`/stores/${store.id}/set_password/`, { password: pwd }),
+    onSuccess: () => { toast("رمز عبور فروشگاه تغییر کرد"); setPwd(""); },
+    onError: (e: Error) => toast(e.message, "danger"),
+  });
+  if (editing) return <StoreForm store={store} onClose={() => { setEditing(false); onClose(); }} />;
   return (
     <Sheet open onClose={onClose} title={store.name}>
       <dl className="grid grid-cols-2 gap-3 text-sm">
@@ -128,6 +148,22 @@ function StoreSheet({ store, canManage, onClose }: { store: StoreT; canManage: b
 
       {canManage && (
         <div className="mt-5 space-y-3 border-t border-line pt-4">
+          <Button size="sm" variant="secondary" icon={<Pencil className="size-4" />} onClick={() => setEditing(true)}>
+            ویرایش مشخصات فروشگاه و مالک
+          </Button>
+          <Field label="رمز عبور جدید مالک" hint="حداقل ۸ کاراکتر؛ پس از ثبت، فروشگاه با همین رمز و شماره موبایل خود وارد می‌شود.">
+            <div className="flex gap-2">
+              <Input type="text" dir="ltr" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="رمز عبور" />
+              <Button variant="soft" icon={<KeyRound className="size-4" />} loading={setPassword.isPending} disabled={pwd.length < 8} onClick={() => setPassword.mutate()}>
+                ثبت رمز
+              </Button>
+            </div>
+          </Field>
+        </div>
+      )}
+
+      {canManage && (
+        <div className="mt-5 space-y-3 border-t border-line pt-4">
           <Field label="دلیل (برای رد یا تعلیق الزامی است)">
             <Textarea value={reason} onChange={(e) => setReason(e.target.value)} className="min-h-16" />
           </Field>
@@ -153,5 +189,63 @@ export function Info({ label, value, wide }: { label: string; value: React.React
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-0.5">{value}</dd>
     </div>
+  );
+}
+
+/** تعریف فروشگاه جدید یا ویرایش کامل مشخصات فروشگاه و حساب مالک آن. */
+function StoreForm({ store, onClose }: { store?: StoreT; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [f, setF] = useState<Record<string, string>>(() => ({
+    name: store?.name ?? "", union: String(store?.union ?? ""), license_no: store?.license_no ?? "",
+    phone: store?.phone ?? "", address: store?.address ?? "", working_hours: store?.working_hours ?? "",
+    owner_mobile: store?.owner_mobile ?? "", owner_first_name: "", owner_last_name: "", password: "",
+  }));
+  const unions = useQuery({ queryKey: ["options", "/unions/"], queryFn: () => api.get<Page<{ id: number; name: string; chamber_name: string }>>("/unions/", { page_size: 500 }) });
+  const m = useMutation({
+    mutationFn: () => {
+      const body: Record<string, unknown> = { ...f };
+      if (!body.password) delete body.password;
+      if (store) { delete body.owner_first_name; delete body.owner_last_name; }
+      return store ? api.patch(`/stores/${store.id}/`, body) : api.post("/stores/", body);
+    },
+    onSuccess: () => {
+      toast(store ? "مشخصات فروشگاه به‌روز شد" : "فروشگاه ثبت و فعال شد");
+      qc.invalidateQueries({ queryKey: ["stores"] });
+      qc.invalidateQueries({ queryKey: ["pending-stores"] });
+      onClose();
+    },
+  });
+  const err = fieldErrors(m.error);
+  const set = (k: string) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  return (
+    <Sheet open onClose={onClose} title={store ? "ویرایش فروشگاه" : "تعریف فروشگاه جدید"}
+      footer={<Button className="w-full" loading={m.isPending} onClick={() => m.mutate()}>{store ? "ذخیره تغییرات" : "ثبت فروشگاه"}</Button>}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="نام فروشگاه" error={err.name}><Input value={f.name} onChange={set("name")} /></Field>
+        <Field label="اتحادیه" error={err.union}>
+          <Select value={f.union} onChange={set("union")}>
+            <option value="">—</option>
+            {(unions.data?.results ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}{u.chamber_name ? ` (${u.chamber_name})` : ""}</option>)}
+          </Select>
+        </Field>
+        <Field label="شماره پروانه کسب" error={err.license_no}><Input value={f.license_no} onChange={set("license_no")} dir="ltr" /></Field>
+        <Field label="تلفن فروشگاه" error={err.phone}><Input value={f.phone} onChange={set("phone")} dir="ltr" /></Field>
+        <Field label="نشانی" error={err.address} className="sm:col-span-2"><Textarea value={f.address} onChange={set("address")} className="min-h-16" /></Field>
+        <Field label="ساعت کاری" error={err.working_hours} className="sm:col-span-2"><Input value={f.working_hours} onChange={set("working_hours")} placeholder="مثلا ۸ تا ۲۲" /></Field>
+      </div>
+
+      <div className="mt-5 border-t border-line pt-4">
+        <h3 className="mb-3 text-sm font-semibold">حساب کاربری مالک فروشگاه</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="موبایل مالک (نام کاربری ورود)" error={err.owner_mobile}><Input value={f.owner_mobile} onChange={set("owner_mobile")} dir="ltr" inputMode="numeric" /></Field>
+          <Field label={store ? "رمز عبور جدید (خالی = بدون تغییر)" : "رمز عبور"} error={err.password}><Input value={f.password} onChange={set("password")} dir="ltr" /></Field>
+          {!store && <Field label="نام مالک"><Input value={f.owner_first_name} onChange={set("owner_first_name")} /></Field>}
+          {!store && <Field label="نام خانوادگی مالک"><Input value={f.owner_last_name} onChange={set("owner_last_name")} /></Field>}
+        </div>
+        {!store && <p className="mt-2 text-xs text-muted">فروشگاهی که از اینجا تعریف می‌کنید بدون نیاز به تایید مجدد، فعال ثبت می‌شود.</p>}
+      </div>
+      {m.error && !Object.keys(err).length && <p className="mt-3 text-sm text-danger">{(m.error as Error).message}</p>}
+    </Sheet>
   );
 }

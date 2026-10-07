@@ -13,6 +13,7 @@ from apps.complaints import api as complaints
 from apps.core import backup_api
 from apps.distribution import api as distribution
 from apps.market import api as market
+from apps.market import price_api
 from apps.observatory import api as observatory
 from apps.orgs import api as orgs
 from apps.shop import api as shop
@@ -70,6 +71,10 @@ api = [
     path("public/complaints/", complaints.submit),
     path("public/complaints/mine/", complaints.my_complaints),
     path("public/complaints/track/", complaints.track),
+    path("prices/pending/", price_api.pending_prices),
+    path("prices/<int:pk>/review/", price_api.review_price),
+    path("prices/bulk-template/", price_api.bulk_template),
+    path("prices/bulk-upload/", price_api.bulk_upload),
     path("analytics/overview/", analytics.overview),
     path("analytics/trends/", analytics.trends),
     path("analytics/price-changes/", analytics.price_changes),

@@ -14,7 +14,8 @@ from .models import Notification, Role, User
 # نقش‌هایی که هر مدیر می‌تواند برای زیرمجموعه خود بسازد
 CREATABLE_ROLES = {
     Role.ADMIN: set(Role.values),
-    Role.GOVERNORATE: {Role.CHAMBER, Role.UNION},
+    Role.GOVERNORATE: {Role.SAMT, Role.CHAMBER, Role.UNION},
+    Role.SAMT: {Role.CHAMBER, Role.UNION},
     Role.CHAMBER: {Role.UNION},
 }
 
@@ -40,7 +41,7 @@ class MeSerializer(serializers.ModelSerializer):
                 "status_reason": s.status_reason, "union_name": s.union.name}
 
     def get_scope_name(self, u):
-        target = {"governorate": u.province, "chamber": u.chamber, "union": u.union}.get(u.role)
+        target = {"governorate": u.province, "samt": u.province, "chamber": u.chamber, "union": u.union}.get(u.role)
         return str(target) if target else ""
 
 
@@ -132,7 +133,7 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["last_login"]
 
     def get_scope_name(self, u):
-        target = {"governorate": u.province, "chamber": u.chamber, "union": u.union}.get(u.role)
+        target = {"governorate": u.province, "samt": u.province, "chamber": u.chamber, "union": u.union}.get(u.role)
         return str(target) if target else ""
 
     def validate_mobile(self, v):
@@ -145,7 +146,8 @@ class UserSerializer(serializers.ModelSerializer):
         role = attrs.get("role", getattr(self.instance, "role", Role.CITIZEN))
         if role not in CREATABLE_ROLES.get(actor.role, set()):
             raise serializers.ValidationError({"role": "مجاز به تعریف کاربر با این نقش نیستید."})
-        required = {Role.GOVERNORATE: "province", Role.CHAMBER: "chamber", Role.UNION: "union"}.get(role)
+        required = {Role.GOVERNORATE: "province", Role.SAMT: "province",
+                    Role.CHAMBER: "chamber", Role.UNION: "union"}.get(role)
         if required and not attrs.get(required, getattr(self.instance, required, None)):
             raise serializers.ValidationError({required: "حوزه این کاربر را مشخص کنید."})
         return attrs
@@ -166,7 +168,7 @@ class UserSerializer(serializers.ModelSerializer):
 class UserViewSet(ScopedModelViewSet):
     queryset = User.objects.select_related("province", "chamber", "union").order_by("-date_joined")
     serializer_class = UserSerializer
-    read_roles = write_roles = ("governorate", "chamber")
+    read_roles = write_roles = ("governorate", "samt", "chamber")
     filterset_fields = ["role", "is_active", "province", "chamber", "union"]
     search_fields = ["mobile", "first_name", "last_name"]
 

@@ -48,7 +48,7 @@ class MyShopProductViewSet(ScopedModelViewSet):
 
     queryset = ShopProduct.objects.select_related("store", "category")
     serializer_class = ShopProductSerializer
-    read_roles = ("governorate", "chamber", "union", "store")
+    read_roles = ("governorate", "samt", "chamber", "union", "store")
     write_roles = ("store",)
     filterset_fields = ["category", "is_active", "is_available", "store"]
     search_fields = ["name", "brand", "description"]

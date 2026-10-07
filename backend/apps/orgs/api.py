@@ -88,14 +88,14 @@ class StoreRegisterSerializer(StoreSerializer):
 class ProvinceViewSet(ScopedModelViewSet):
     queryset = Province.objects.all()
     serializer_class = ProvinceSerializer
-    read_roles = ("governorate",)
+    read_roles = ("governorate", "samt")
     search_fields = ["name"]
 
 
 class CountyViewSet(ScopedModelViewSet):
     queryset = County.objects.select_related("province")
     serializer_class = CountySerializer
-    read_roles = ("governorate", "chamber")
+    read_roles = ("governorate", "samt", "chamber")
     write_roles = ("governorate",)
     filterset_fields = ["province"]
     search_fields = ["name"]
@@ -104,7 +104,7 @@ class CountyViewSet(ScopedModelViewSet):
 class ChamberViewSet(ScopedModelViewSet):
     queryset = Chamber.objects.select_related("county")
     serializer_class = ChamberSerializer
-    read_roles = ("governorate", "chamber")
+    read_roles = ("governorate", "samt", "chamber")
     write_roles = ("governorate",)
     filterset_fields = ["county"]
     search_fields = ["name"]
@@ -113,8 +113,8 @@ class ChamberViewSet(ScopedModelViewSet):
 class UnionViewSet(ScopedModelViewSet):
     queryset = Union.objects.select_related("chamber__county")
     serializer_class = UnionSerializer
-    read_roles = ("governorate", "chamber", "union")
-    write_roles = ("governorate", "chamber")
+    read_roles = ("governorate", "samt", "chamber", "union")
+    write_roles = ("governorate", "samt", "chamber")
     filterset_fields = ["chamber", "chamber__county", "is_active"]
     search_fields = ["name", "guild"]
 
@@ -124,9 +124,9 @@ class StoreViewSet(ScopedModelViewSet):
 
     queryset = Store.objects.select_related("union__chamber__county", "owner")
     serializer_class = StoreSerializer
-    read_roles = ("governorate", "chamber", "union")
+    read_roles = ("governorate", "samt", "chamber", "union")
     # تایید/رد/تعلیق فروشگاه را اتحادیه، اتاق اصناف، استانداری و مدیر کل انجام می‌دهند
-    write_roles = ("union", "chamber", "governorate")
+    write_roles = ("union", "chamber", "samt", "governorate")
     http_method_names = ["get", "patch", "post", "head", "options"]
     filterset_fields = ["status", "union", "union__chamber", "union__chamber__county", "is_verified"]
     search_fields = ["name", "address", "owner__mobile", "license_no"]

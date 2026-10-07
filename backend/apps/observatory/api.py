@@ -61,8 +61,8 @@ class CommodityReportViewSet(ScopedModelViewSet):
 
     queryset = CommodityReport.objects.select_related("commodity", "province")
     serializer_class = CommodityReportSerializer
-    read_roles = ("governorate", "chamber", "union")
-    write_roles = ("governorate",)
+    read_roles = ("governorate", "samt", "chamber", "union")
+    write_roles = ("governorate", "samt")
     filterset_fields = ["commodity", "province", "period"]
     ordering_fields = ["period"]
 
@@ -83,8 +83,8 @@ class CommodityReportViewSet(ScopedModelViewSet):
 class AlertViewSet(ScopedModelViewSet):
     queryset = Alert.objects.select_related("county", "product", "store")
     serializer_class = AlertSerializer
-    read_roles = ("governorate", "chamber", "union")
-    write_roles = ("governorate", "chamber", "union")
+    read_roles = ("governorate", "samt", "chamber", "union")
+    write_roles = ("governorate", "samt", "chamber", "union")
     http_method_names = ["get", "post", "head", "options"]
     filterset_fields = ["kind", "level", "is_resolved", "county"]
 

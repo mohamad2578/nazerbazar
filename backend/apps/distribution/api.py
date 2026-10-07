@@ -100,8 +100,8 @@ class AllocationSerializer(serializers.ModelSerializer):
 class AllocationViewSet(ScopedModelViewSet):
     queryset = Allocation.objects.select_related("commodity", "province").prefetch_related("shares__union")
     serializer_class = AllocationSerializer
-    read_roles = ("governorate", "chamber", "union")
-    write_roles = ("governorate",)
+    read_roles = ("governorate", "samt", "chamber", "union")
+    write_roles = ("governorate", "samt")
     filterset_fields = ["status", "commodity", "province"]
     search_fields = ["title", "supplier"]
 
@@ -129,7 +129,7 @@ class ShareViewSet(ScopedModelViewSet):
 
     queryset = AllocationShare.objects.select_related("allocation__commodity", "union")
     serializer_class = ShareSerializer
-    read_roles = ("governorate", "chamber", "union")
+    read_roles = ("governorate", "samt", "chamber", "union")
     write_roles = ("union",)
     http_method_names = ["get", "post", "head", "options"]
     filterset_fields = ["allocation", "union"]
@@ -157,7 +157,7 @@ class ShareViewSet(ScopedModelViewSet):
 class QuotaViewSet(ScopedModelViewSet):
     queryset = Quota.objects.select_related("store", "share__allocation__commodity").prefetch_related("events")
     serializer_class = QuotaSerializer
-    read_roles = ("governorate", "chamber", "union", "store")
+    read_roles = ("governorate", "samt", "chamber", "union", "store")
     write_roles = ("union", "store")
     http_method_names = ["get", "post", "head", "options"]
     filterset_fields = ["status", "store", "share", "share__allocation"]

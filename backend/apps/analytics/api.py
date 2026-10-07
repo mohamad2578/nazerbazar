@@ -22,8 +22,8 @@ from apps.observatory.models import Alert
 from apps.observatory.services import basket_cost
 from apps.orgs.models import County, Store, Union
 
-PANEL = role_permission("governorate", "chamber", "union", "store")
-MANAGERS = role_permission("governorate", "chamber", "union")
+PANEL = role_permission("governorate", "samt", "chamber", "union", "store")
+MANAGERS = role_permission("governorate", "samt", "chamber", "union")
 
 
 def S(qs, request):
@@ -218,7 +218,7 @@ def unions_report(request):
 
 def _county_rows(request):
     counties = S(County.objects.select_related("province"), request)
-    if request.user.role in ("union",):
+    if request.user.role == "union":
         counties = County.objects.filter(pk=request.user.union.chamber.county_id)
     rows = []
     for c in counties:

@@ -22,6 +22,8 @@ const Dashboard = lazy(() => import("./pages/panel/Dashboard"));
 const Stores = lazy(() => import("./pages/panel/Stores"));
 const Products = lazy(() => import("./pages/panel/Products"));
 const Prices = lazy(() => import("./pages/panel/Prices"));
+const PriceApprovals = lazy(() => import("./pages/panel/PriceApprovals"));
+const PriceUpload = lazy(() => import("./pages/panel/PriceUpload"));
 const Complaints = lazy(() => import("./pages/panel/Complaints"));
 const ComplaintDetail = lazy(() => import("./pages/panel/ComplaintDetail"));
 const Quotas = lazy(() => import("./pages/panel/Quotas"));
@@ -52,7 +54,9 @@ function RequirePanel({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-const MANAGERS: Role[] = ["governorate", "chamber", "union"];
+const MANAGERS: Role[] = ["governorate", "samt", "chamber", "union"];
+const REVIEWERS: Role[] = ["chamber", "samt", "governorate"];
+const PRICE_LOADERS: Role[] = ["samt", "governorate"];
 
 export default function App() {
   return (
@@ -78,6 +82,8 @@ export default function App() {
           <Route path="stores" element={<RequireAuth roles={MANAGERS}><Stores /></RequireAuth>} />
           <Route path="products" element={<RequireAuth roles={MANAGERS}><Products /></RequireAuth>} />
           <Route path="prices" element={<RequireAuth roles={["store"]}><Prices /></RequireAuth>} />
+          <Route path="price-approvals" element={<RequireAuth roles={REVIEWERS}><PriceApprovals /></RequireAuth>} />
+          <Route path="price-upload" element={<RequireAuth roles={PRICE_LOADERS}><PriceUpload /></RequireAuth>} />
           <Route path="profile" element={<RequireAuth roles={["store"]}><StoreProfile /></RequireAuth>} />
           <Route path="my-shop" element={<RequireAuth roles={["store"]}><MyShop /></RequireAuth>} />
           <Route path="orders" element={<RequireAuth roles={["store", "union", "chamber", "governorate"]}><Orders /></RequireAuth>} />

@@ -13,6 +13,7 @@ type ProductT = {
   commodity_name: string; name: string; unit: string; unit_display: string; unit_amount: string; description: string;
   current_price: number; max_discount_percent: number; min_allowed_price: number; price_changed_at: string | null;
   is_active: boolean; offers_count: number; stale_count: number; image: string | null;
+  pending_price: { id: number; price: number; created_at: string; note: string } | null;
 };
 
 const UNITS = [["kg", "کیلوگرم"], ["g", "گرم"], ["piece", "عدد"], ["pack", "بسته"], ["l", "لیتر"], ["carton", "کارتن"]];
@@ -53,7 +54,16 @@ export default function Products() {
                   <div className="min-w-0"><div className="truncate font-medium">{p.name}</div><div className="truncate text-xs text-muted">{p.union_name} · {p.unit_display}</div></div>
                 </div>
               ) },
-              { key: "current_price", label: "نرخ مصوب", render: (p) => <b className="tabular">{toman(p.current_price)}</b> },
+              { key: "current_price", label: "نرخ مصوب", render: (p) => (
+                <div>
+                  <b className="tabular">{toman(p.current_price)}</b>
+                  {p.pending_price && (
+                    <div className="mt-0.5 whitespace-nowrap text-[11px] text-warn">
+                      {toman(p.pending_price.price)} در انتظار تایید
+                    </div>
+                  )}
+                </div>
+              ) },
               { key: "min", label: "حداقل مجاز", render: (p) => <span className="tabular text-muted">{toman(p.min_allowed_price)}</span>, hideOnMobile: true },
               { key: "offers_count", label: "فروشگاه", render: (p) => num(p.offers_count) },
               { key: "stale_count", label: "به‌روزنشده", render: (p) => (p.stale_count ? <Badge tone="warn">{num(p.stale_count)}</Badge> : "—") },
@@ -137,6 +147,9 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
 function PriceSheet({ product, onClose }: { product: ProductT; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const { user } = useAuth();
+  // نرخ اتحادیه نیاز به تایید اتاق اصناف دارد؛ صمت و بالاتر بی‌درنگ اعمال می‌شود
+  const needsApproval = user!.role === "union";
   const [price, setPrice] = useState(String(toToman(product.current_price) || ""));
   const [discount, setDiscount] = useState(String(product.max_discount_percent));
   const [note, setNote] = useState("");
@@ -144,13 +157,17 @@ function PriceSheet({ product, onClose }: { product: ProductT; onClose: () => vo
   const offers = useQuery({ queryKey: ["p-offers", product.id], queryFn: () => api.get<any[]>(`/products/${product.id}/offers/`) });
   const m = useMutation({
     mutationFn: () => api.post(`/products/${product.id}/set_price/`, { price: toRial(price), max_discount_percent: +discount, note }),
-    onSuccess: () => { toast("نرخ جدید ثبت و به فروشگاه‌ها اعلان شد"); qc.invalidateQueries({ queryKey: ["products-panel"] }); onClose(); },
+    onSuccess: () => {
+      toast(needsApproval ? "نرخ ثبت شد و برای تایید اتاق اصناف ارسال گردید" : "نرخ جدید ثبت و به فروشگاه‌ها اعلان شد");
+      qc.invalidateQueries({ queryKey: ["products-panel"] });
+      onClose();
+    },
     onError: (e: Error) => toast(e.message, "danger"),
   });
   const newRial = price ? toRial(price) : 0;
   const change = product.current_price && newRial ? ((newRial - product.current_price) / product.current_price) * 100 : 0;
   return (
-    <Sheet open onClose={onClose} title={`نرخ‌گذاری: ${product.name}`} wide footer={<Button className="w-full" loading={m.isPending} disabled={!newRial} onClick={() => m.mutate()}>ثبت نرخ مصوب</Button>}>
+    <Sheet open onClose={onClose} title={`نرخ‌گذاری: ${product.name}`} wide footer={<Button className="w-full" loading={m.isPending} disabled={!newRial} onClick={() => m.mutate()}>{needsApproval ? "ارسال برای تایید" : "ثبت نرخ مصوب"}</Button>}>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="نرخ مصوب جدید" hint={change ? <span className={change > 0 ? "text-danger" : "text-ok"}>{change > 0 ? "افزایش" : "کاهش"} {num(Math.abs(change), 1)}٪</span> : `فعلی: ${toman(product.current_price)}`}>
           <PriceInput value={price} onChange={setPrice} />
@@ -160,7 +177,14 @@ function PriceSheet({ product, onClose }: { product: ProductT; onClose: () => vo
         </Field>
         <Field label="توضیح (اختیاری)"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثلا افزایش نرخ حمل" /></Field>
       </div>
-      {change !== 0 && <p className="mt-3 rounded-xl bg-warn-soft p-3 text-xs text-warn">{num(product.offers_count)} فروشگاه اعلان دریافت می‌کنند و باید ظرف ۲۴ ساعت قیمت خود را به‌روز کنند.</p>}
+      {needsApproval ? (
+        <p className="mt-3 rounded-xl bg-brand-soft p-3 text-xs leading-6 text-brand">
+          نرخی که ثبت می‌کنید پس از <b>تایید اتاق اصناف</b> روی سایت اعمال می‌شود.
+          {product.pending_price && ` در حال حاضر نرخ ${toman(product.pending_price.price)} در انتظار تایید است و با ثبت نرخ جدید جایگزین می‌شود.`}
+        </p>
+      ) : (
+        change !== 0 && <p className="mt-3 rounded-xl bg-warn-soft p-3 text-xs text-warn">{num(product.offers_count)} فروشگاه اعلان دریافت می‌کنند و باید ظرف ۲۴ ساعت قیمت خود را به‌روز کنند.</p>
+      )}
       {(history.data?.length ?? 0) > 1 && (
         <div className="mt-5">
           <h3 className="mb-1 flex items-center gap-1 text-sm font-semibold"><TrendingUp className="size-4" /> روند نرخ</h3>

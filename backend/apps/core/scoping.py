@@ -1,12 +1,13 @@
 """محدودسازی داده‌ها بر اساس جایگاه کاربر در سلسله‌مراتب:
-استان (استانداری) -> شهرستان -> اتاق اصناف -> اتحادیه -> فروشگاه
+استان (استانداری و اداره صمت) -> شهرستان -> اتاق اصناف -> اتحادیه -> فروشگاه
 هر مدل مسیر lookup خود تا هر سطح را در دیکشنری SCOPE معرفی می‌کند؛
 مقدار می‌تواند یک مسیر یا چند مسیر (tuple، با OR) باشد.
 """
 from django.db.models import Q
 
-ROLE_FIELD = {"governorate": "province_id", "chamber": "chamber_id", "union": "union_id"}
-ROLE_LEVEL = {"governorate": "province", "chamber": "chamber", "union": "union"}
+# اداره صمت مانند استانداری در سطح استان عمل می‌کند (بالادست اتاق اصناف)
+ROLE_FIELD = {"governorate": "province_id", "samt": "province_id", "chamber": "chamber_id", "union": "union_id"}
+ROLE_LEVEL = {"governorate": "province", "samt": "province", "chamber": "chamber", "union": "union"}
 
 
 def _any(paths, value) -> Q:

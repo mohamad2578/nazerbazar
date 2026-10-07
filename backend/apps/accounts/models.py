@@ -11,6 +11,7 @@ from apps.core.utils import normalize_mobile
 class Role(models.TextChoices):
     ADMIN = "admin", "مدیر کل سامانه"
     GOVERNORATE = "governorate", "استانداری"
+    SAMT = "samt", "اداره صمت"
     CHAMBER = "chamber", "اتاق اصناف"
     UNION = "union", "اتحادیه"
     STORE = "store", "فروشگاه"

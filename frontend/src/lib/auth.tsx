@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, tokens } from "./api";
 
-export type Role = "admin" | "governorate" | "chamber" | "union" | "store" | "citizen";
+export type Role = "admin" | "governorate" | "samt" | "chamber" | "union" | "store" | "citizen";
 
 export type Me = {
   id: number;
@@ -73,6 +73,7 @@ export const isPanelUser = (u: Me | null) => !!u && (u.role !== "citizen" || !!u
 export const ROLE_LABEL: Record<Role, string> = {
   admin: "مدیر کل",
   governorate: "استانداری",
+  samt: "اداره صمت",
   chamber: "اتاق اصناف",
   union: "اتحادیه",
   store: "فروشگاه",

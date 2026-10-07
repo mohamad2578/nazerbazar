@@ -1,5 +1,6 @@
 """تست قواعد اصلی: سقف/کف قیمت، مهلت ۲۴ ساعته، مرتب‌سازی، دسترسی سلسله‌مراتبی، شکایت و توزیع."""
 from datetime import timedelta
+from io import BytesIO
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -42,7 +43,7 @@ class Base(TestCase):
                 status=Store.Status.ACTIVE,
             ))
         cls.product = Product.objects.create(union=cls.union, name="شکر", unit="kg")
-        set_official_price(cls.product, 1_000_000, cls.uni)
+        set_official_price(cls.product, 1_000_000, cls.cham)
 
     def client_for(self, user):
         c = APIClient()
@@ -61,7 +62,7 @@ class PriceRulesTests(Base):
         self.assertEqual(upsert_offer(s, self.product, 1_000_000).price, 1_000_000)
 
     def test_custom_discount_limit(self):
-        set_official_price(self.product, 1_000_000, self.uni, max_discount=10)
+        set_official_price(self.product, 1_000_000, self.cham, max_discount=10)
         with self.assertRaises(Exception):
             upsert_offer(self.stores[0], self.product, 850_000)
 
@@ -78,7 +79,7 @@ class PriceRulesTests(Base):
     def test_24h_grace_then_hidden_until_updated(self):
         s = self.stores[0]
         offer = upsert_offer(s, self.product, 900_000)
-        set_official_price(self.product, 1_200_000, self.uni)
+        set_official_price(self.product, 1_200_000, self.cham)
         # در مهلت: هنوز نمایش داده می‌شود ولی علامت «در انتظار به‌روزرسانی» دارد
         self.assertIn(offer.pk, visible_offers().values_list("pk", flat=True))
         offer.refresh_from_db()
@@ -94,7 +95,7 @@ class PriceRulesTests(Base):
     def test_same_price_does_not_reset_deadline(self):
         offer = upsert_offer(self.stores[0], self.product, 900_000)
         changed = self.product.price_changed_at
-        set_official_price(self.product, 1_000_000, self.uni)
+        set_official_price(self.product, 1_000_000, self.cham)
         self.product.refresh_from_db()
         self.assertEqual(self.product.price_changed_at, changed)
         offer.refresh_from_db()
@@ -102,7 +103,7 @@ class PriceRulesTests(Base):
 
     def test_store_notified_on_price_change(self):
         upsert_offer(self.stores[0], self.product, 900_000)
-        set_official_price(self.product, 1_100_000, self.uni)
+        set_official_price(self.product, 1_100_000, self.cham)
         self.assertTrue(self.stores[0].owner.notifications.filter(title__contains="تغییر نرخ").exists())
 
 
@@ -136,11 +137,17 @@ class ScopeTests(Base):
         r = self.client_for(self.uni2).post(f"/api/products/{self.product.pk}/set_price/", {"price": 5})
         self.assertEqual(r.status_code, 404)
 
-    def test_union_creates_product_in_own_union(self):
+    def test_union_creates_product_with_price_awaiting_approval(self):
         r = self.client_for(self.uni).post("/api/products/", {"name": "عدس", "unit": "kg", "initial_price": 300000})
         self.assertEqual(r.status_code, 201, r.data)
         p = Product.objects.get(pk=r.data["id"])
-        self.assertEqual((p.union_id, p.current_price), (self.union.pk, 300000))
+        # کالا ساخته می‌شود ولی نرخ اولیه اتحادیه تا تایید اتاق اصناف اعمال نمی‌شود
+        self.assertEqual((p.union_id, p.current_price), (self.union.pk, 0))
+        pending = p.price_history.get()
+        self.assertEqual((pending.status, pending.price), ("pending", 300000))
+        self.client_for(self.cham).post(f"/api/prices/{pending.pk}/review/", {"approve": True})
+        p.refresh_from_db()
+        self.assertEqual(p.current_price, 300000)
 
     def test_governorate_cannot_create_county_in_other_province(self):
         c = self.client_for(self.gov)
@@ -340,7 +347,7 @@ class PriceSnapTests(Base):
         s0, s1 = self.stores[0], self.stores[1]
         upsert_offer(s0, self.product, 850_000)   # ۱۵٪ زیر نرخ
         upsert_offer(s1, self.product, 1_000_000)  # برابر نرخ
-        set_official_price(self.product, 1_200_000, self.uni)
+        set_official_price(self.product, 1_200_000, self.cham)
         self.assertEqual([o.price for o in StoreOffer.objects.filter(product=self.product).order_by("pk")],
                          [1_200_000, 1_200_000])
         # همچنان «در انتظار به‌روزرسانی» است تا فروشگاه تایید/اصلاح کند
@@ -353,7 +360,7 @@ class PriceSnapTests(Base):
 
     def test_unchanged_price_does_not_touch_offers(self):
         upsert_offer(self.stores[0], self.product, 850_000)
-        set_official_price(self.product, 1_000_000, self.uni)  # همان نرخ قبلی
+        set_official_price(self.product, 1_000_000, self.cham)  # همان نرخ قبلی
         self.assertEqual(StoreOffer.objects.get(store=self.stores[0]).price, 850_000)
 
 
@@ -483,3 +490,124 @@ class BackupTests(Base):
         info = c.post("/api/backup/inspect/", {"file": upload}, format="multipart").data
         self.assertEqual(info["version"], 1)
         self.assertEqual(info["counts"]["orgs.store"], Store.objects.count())
+
+
+class SamtAndPriceApprovalTests(Base):
+    """اداره صمت (بالادست اتاق اصناف) و گردش تایید نرخ مصوب."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000005", role=Role.SAMT, province=cls.prov)
+        cls.samt2 = User.objects.create_user("09120000006", role=Role.SAMT, province=cls.prov2)
+
+    def test_union_price_waits_for_chamber_approval(self):
+        before = self.product.current_price
+        rec = set_official_price(self.product, 1_300_000, self.uni)
+        self.product.refresh_from_db()
+        # نرخ هنوز اعمال نشده است
+        self.assertEqual(rec.status, "pending")
+        self.assertEqual(self.product.current_price, before)
+        # اتاق اصناف و اداره صمت آن را در کارتابل می‌بینند
+        for user in (self.cham, self.samt):
+            rows = self.client_for(user).get("/api/prices/pending/").data["results"]
+            self.assertEqual([r["id"] for r in rows], [rec.pk], user.role)
+        # اتحادیه دیگر استان آن را نمی‌بیند
+        self.assertEqual(self.client_for(self.samt2).get("/api/prices/pending/").data["count"], 0)
+        self.assertTrue(self.cham.notifications.filter(title__contains="در انتظار تایید").exists())
+
+        r = self.client_for(self.cham).post(f"/api/prices/{rec.pk}/review/", {"approve": True})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_price, 1_300_000)
+        self.assertTrue(self.uni.notifications.filter(title__contains="تایید شد").exists())
+
+    def test_rejected_price_is_not_applied_and_needs_reason(self):
+        rec = set_official_price(self.product, 2_000_000, self.uni)
+        c = self.client_for(self.cham)
+        self.assertEqual(c.post(f"/api/prices/{rec.pk}/review/", {"approve": False}).status_code, 400)
+        r = c.post(f"/api/prices/{rec.pk}/review/", {"approve": False, "note": "نرخ غیرواقعی است"})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_price, 1_000_000)
+        self.assertTrue(self.uni.notifications.filter(title__contains="رد شد").exists())
+        # بررسی دوباره مجاز نیست
+        self.assertEqual(c.post(f"/api/prices/{rec.pk}/review/", {"approve": True}).status_code, 400)
+
+    def test_samt_price_applies_immediately(self):
+        rec = set_official_price(self.product, 1_400_000, self.samt)
+        self.product.refresh_from_db()
+        self.assertEqual(rec.status, "approved")
+        self.assertEqual(self.product.current_price, 1_400_000)
+
+    def test_union_cannot_review_prices(self):
+        rec = set_official_price(self.product, 1_200_000, self.uni)
+        self.assertEqual(self.client_for(self.uni).get("/api/prices/pending/").status_code, 403)
+        self.assertEqual(self.client_for(self.uni).post(f"/api/prices/{rec.pk}/review/", {"approve": True}).status_code, 403)
+
+    def test_newer_union_price_supersedes_previous_pending(self):
+        first = set_official_price(self.product, 1_100_000, self.uni)
+        second = set_official_price(self.product, 1_150_000, self.uni)
+        first.refresh_from_db()
+        self.assertEqual(first.status, "rejected")
+        self.assertEqual(second.status, "pending")
+        rows = self.client_for(self.cham).get("/api/prices/pending/").data["results"]
+        self.assertEqual([r["id"] for r in rows], [second.pk])
+
+    def test_samt_bulk_upload_sets_prices(self):
+        from openpyxl import load_workbook
+
+        c = self.client_for(self.samt)
+        r = c.get("/api/prices/bulk-template/")
+        self.assertEqual(r.status_code, 200)
+        wb = load_workbook(BytesIO(r.content))
+        ws = wb.active
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        self.assertEqual(rows[0][0], self.product.pk)
+
+        # پر کردن ستون «نرخ جدید» و بارگذاری
+        ws.cell(2, 6, 1_750_000)
+        buf = BytesIO()
+        wb.save(buf)
+        upload = SimpleUploadedFile("p.xlsx", buf.getvalue())
+        preview = c.post("/api/prices/bulk-upload/", {"file": upload, "dry_run": "true"}, format="multipart").data
+        self.assertEqual(preview["changes"][0]["new_price"], 1_750_000)
+        self.assertEqual(preview["applied"], 0)
+
+        buf.seek(0)
+        upload = SimpleUploadedFile("p.xlsx", buf.getvalue())
+        out = c.post("/api/prices/bulk-upload/", {"file": upload}, format="multipart").data
+        self.assertEqual(out["applied"], 1)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_price, 1_750_000)
+
+    def test_bulk_upload_rejects_products_outside_scope(self):
+        foreign = Product.objects.create(union=self.other_union, name="بیرونی", current_price=100)
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["شناسه کالا", "نام", "اتحادیه", "واحد", "فعلی", "نرخ جدید", "تخفیف", "توضیح"])
+        ws.append([foreign.pk, foreign.name, "", "", 100, 999, 20, ""])
+        buf = BytesIO()
+        wb.save(buf)
+        out = self.client_for(self.samt).post(
+            "/api/prices/bulk-upload/", {"file": SimpleUploadedFile("p.xlsx", buf.getvalue())}, format="multipart"
+        ).data
+        self.assertEqual(out["applied"], 0)
+        self.assertEqual(len(out["errors"]), 1)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.current_price, 100)
+
+    def test_samt_can_manage_structure_like_governorate(self):
+        c = self.client_for(self.samt)
+        self.assertEqual(c.get("/api/stores/").status_code, 200)
+        self.assertEqual(c.get("/api/analytics/overview/").status_code, 200)
+        # صمت می‌تواند کاربر اتاق اصناف بسازد
+        r = c.post("/api/users/", {"mobile": "09125550001", "role": "chamber", "chamber": self.chamber.pk})
+        self.assertEqual(r.status_code, 201, r.data)
+        # ولی نمی‌تواند کاربر استانداری بسازد
+        self.assertEqual(
+            c.post("/api/users/", {"mobile": "09125550002", "role": "governorate", "province": self.prov.pk}).status_code,
+            400,
+        )

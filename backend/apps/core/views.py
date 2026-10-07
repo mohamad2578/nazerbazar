@@ -5,7 +5,7 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 from .scoping import scoped
 
-PANEL_ROLES = ("admin", "governorate", "chamber", "union", "store")
+PANEL_ROLES = ("admin", "governorate", "samt", "chamber", "union", "store")
 
 
 class ScopedPermission(BasePermission):

@@ -86,7 +86,17 @@ class Product(TimeStamped):
 
 
 class OfficialPrice(models.Model):
-    """تاریخچه نرخ‌های مصوب اتحادیه"""
+    """نرخ مصوب هر کالا و تاریخچه آن.
+
+    نرخی که **اتحادیه** ثبت می‌کند در وضعیت «در انتظار تایید» می‌ماند و تا تایید
+    اتاق اصناف (یا اداره صمت/مدیر کل) روی سایت اعمال نمی‌شود. نرخی که **اداره صمت**،
+    اتاق اصناف یا مدیر کل ثبت کند بی‌درنگ تایید‌شده محسوب و اعمال می‌شود.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "در انتظار تایید"
+        APPROVED = "approved", "تاییدشده"
+        REJECTED = "rejected", "رد شده"
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="price_history")
     price = models.PositiveBigIntegerField("نرخ (ریال)", validators=[MinValueValidator(1)])
@@ -95,6 +105,16 @@ class OfficialPrice(models.Model):
     note = models.CharField("توضیح", max_length=300, blank=True)
     set_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    status = models.CharField(
+        "وضعیت", max_length=10, choices=Status.choices, default=Status.APPROVED, db_index=True
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+        verbose_name="بررسی‌کننده",
+    )
+    reviewed_at = models.DateTimeField("زمان بررسی", null=True, blank=True)
+    review_note = models.CharField("توضیح بررسی", max_length=300, blank=True)
 
     SCOPE = {"province": "product__union__chamber__county__province", "chamber": "product__union__chamber", "union": "product__union"}
 

@@ -11,7 +11,7 @@ from django.db import transaction
 from django.db.models import Avg, Count, F, Max, Min, Q
 from django.utils import timezone
 
-from apps.accounts.models import User, notify
+from apps.accounts.models import Role, User, notify
 from apps.core.utils import percent_change
 from apps.orgs.models import Store
 
@@ -50,26 +50,98 @@ def validate_offer_price(product: Product, price: int) -> None:
         )
 
 
+# نقش‌هایی که نرخ مصوبشان بدون تایید اعمال می‌شود (اداره صمت بالادست اتاق اصناف است)
+SELF_APPROVING_ROLES = (Role.SAMT, Role.CHAMBER, Role.GOVERNORATE, Role.ADMIN)
+# نقش‌هایی که می‌توانند نرخ در انتظار را تایید یا رد کنند
+PRICE_REVIEWER_ROLES = (Role.CHAMBER, Role.SAMT, Role.GOVERNORATE, Role.ADMIN)
+
+
 @transaction.atomic
 def set_official_price(product: Product, price: int, by: User, max_discount=None, note="") -> OfficialPrice:
+    """ثبت نرخ مصوب.
+
+    اگر ثبت‌کننده «اتحادیه» باشد، نرخ در وضعیت «در انتظار تایید» می‌ماند و تا تایید
+    اتاق اصناف اعمال نمی‌شود. برای اداره صمت و بالاتر، بی‌درنگ اعمال می‌شود.
+    """
     price = int(price)
     if price <= 0:
         raise ValidationError({"price": "نرخ باید بزرگ‌تر از صفر باشد."})
-    if max_discount is not None:
-        product.max_discount_percent = int(max_discount)
-    previous = product.current_price
-    changed = previous != price
+
+    needs_review = getattr(by, "role", None) not in SELF_APPROVING_ROLES
+    discount = int(max_discount) if max_discount is not None else product.max_discount_percent
+
     record = OfficialPrice.objects.create(
         product=product,
         price=price,
-        previous_price=previous,
-        max_discount_percent=product.max_discount_percent,
+        previous_price=product.current_price,
+        max_discount_percent=discount,
         note=note,
         set_by=by,
+        status=OfficialPrice.Status.PENDING if needs_review else OfficialPrice.Status.APPROVED,
     )
+
+    if needs_review:
+        # نرخ قبلی تا زمان تایید دست‌نخورده می‌ماند
+        OfficialPrice.objects.filter(
+            product=product, status=OfficialPrice.Status.PENDING
+        ).exclude(pk=record.pk).update(
+            status=OfficialPrice.Status.REJECTED,
+            review_note="با ثبت نرخ جدیدتر توسط اتحادیه جایگزین شد.",
+            reviewed_at=timezone.now(),
+        )
+        reviewers = User.objects.filter(
+            Q(role=Role.CHAMBER, chamber=product.union.chamber)
+            | Q(role=Role.SAMT, province=product.union.chamber.county.province)
+        )
+        notify(
+            reviewers,
+            f"نرخ جدید در انتظار تایید: {product.name}",
+            f"{product.union.name} نرخ {price:,} ریال را ثبت کرد و منتظر تایید شماست.",
+            "/panel/price-approvals",
+        )
+        return record
+
+    _apply_price(record, product, discount)
+    return record
+
+
+@transaction.atomic
+def review_price(record: OfficialPrice, by: User, approve: bool, note: str = "") -> OfficialPrice:
+    """تایید یا رد نرخِ در انتظار، توسط اتاق اصناف/اداره صمت/استانداری/مدیر کل."""
+    if record.status != OfficialPrice.Status.PENDING:
+        raise ValidationError({"status": "این نرخ قبلا بررسی شده است."})
+    if getattr(by, "role", None) not in PRICE_REVIEWER_ROLES:
+        raise ValidationError({"detail": "شما مجاز به تایید نرخ نیستید."})
+    if not approve and not note:
+        raise ValidationError({"note": "برای رد نرخ، دلیل را بنویسید."})
+
+    record.status = OfficialPrice.Status.APPROVED if approve else OfficialPrice.Status.REJECTED
+    record.reviewed_by = by
+    record.reviewed_at = timezone.now()
+    record.review_note = note
+    record.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_note"])
+
+    product = record.product
+    union_users = User.objects.filter(role=Role.UNION, union=product.union)
+    if approve:
+        _apply_price(record, product, record.max_discount_percent)
+        notify(union_users, f"نرخ «{product.name}» تایید شد",
+               f"نرخ {record.price:,} ریال اعمال شد. {note}".strip(), "/panel/products")
+    else:
+        notify(union_users, f"نرخ «{product.name}» رد شد", note, "/panel/products")
+    return record
+
+
+def _apply_price(record: OfficialPrice, product: Product, discount: int) -> None:
+    """اعمال نرخ تاییدشده روی کالا، قیمت فروشگاه‌ها، اعلان‌ها و هشدارها."""
+    previous = product.current_price
+    price = record.price
+    changed = previous != price
+
     product.current_price = price
+    product.max_discount_percent = discount
     if changed:
-        product.price_changed_at = record.created_at
+        product.price_changed_at = timezone.now()
     product.save(update_fields=["current_price", "max_discount_percent", "price_changed_at", "updated_at"])
 
     if changed:
@@ -96,7 +168,6 @@ def set_official_price(product: Product, price: int, by: User, max_discount=None
             from apps.observatory.services import raise_official_price_alert
 
             raise_official_price_alert(product, previous, price, change)
-    return record
 
 
 @transaction.atomic

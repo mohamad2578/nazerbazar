@@ -50,7 +50,7 @@ class OrderViewSet(ScopedModelViewSet):
 
     queryset = Order.objects.select_related("store").prefetch_related("items", "events")
     serializer_class = OrderSerializer
-    read_roles = ("governorate", "chamber", "union", "store")
+    read_roles = ("governorate", "samt", "chamber", "union", "store")
     write_roles = ("store",)
     http_method_names = ["get", "post", "head", "options"]
     filterset_fields = ["status", "store", "delivery"]

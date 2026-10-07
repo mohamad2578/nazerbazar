@@ -124,8 +124,8 @@ class ComplaintViewSet(ScopedModelViewSet):
 
     queryset = Complaint.objects.select_related("store", "product", "union", "chamber", "reporter")
     serializer_class = ComplaintSerializer
-    read_roles = ("governorate", "chamber", "union", "store")
-    write_roles = ("chamber", "union")
+    read_roles = ("governorate", "samt", "chamber", "union", "store")
+    write_roles = ("chamber", "samt", "union")
     http_method_names = ["get", "post", "head", "options"]
     filterset_fields = ["status", "kind", "union", "chamber", "store", "violation_confirmed"]
     search_fields = ["tracking_code", "store__name", "shop_name", "product__name", "description"]

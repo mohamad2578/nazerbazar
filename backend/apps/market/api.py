@@ -33,6 +33,7 @@ class ProductSerializer(serializers.ModelSerializer):
     initial_price = serializers.IntegerField(write_only=True, required=False, min_value=1)
     offers_count = serializers.IntegerField(read_only=True, default=0)
     stale_count = serializers.IntegerField(read_only=True, default=0)
+    pending_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -40,17 +41,27 @@ class ProductSerializer(serializers.ModelSerializer):
             "id", "union", "union_name", "category", "category_name", "commodity", "commodity_name", "name",
             "unit", "unit_display", "unit_amount", "description", "image", "current_price", "max_discount_percent",
             "min_allowed_price", "price_changed_at", "is_active", "initial_price", "offers_count", "stale_count",
+            "pending_price",
         ]
         read_only_fields = ["current_price", "price_changed_at"]
         extra_kwargs = {"union": {"required": False}}
 
+    def get_pending_price(self, p):
+        """نرخی که اتحادیه ثبت کرده و منتظر تایید اتاق اصناف است."""
+        rec = p.price_history.filter(status=OfficialPrice.Status.PENDING).order_by("-created_at").first()
+        if not rec:
+            return None
+        return {"id": rec.pk, "price": rec.price, "created_at": rec.created_at, "note": rec.note}
+
 
 class OfficialPriceSerializer(serializers.ModelSerializer):
     set_by_name = serializers.CharField(source="set_by.full_name", read_only=True, default="")
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
         model = OfficialPrice
-        fields = ["id", "price", "previous_price", "max_discount_percent", "note", "set_by_name", "created_at"]
+        fields = ["id", "price", "previous_price", "max_discount_percent", "note", "set_by_name", "created_at",
+                  "status", "status_display", "review_note", "reviewed_at"]
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -66,8 +77,8 @@ class ProductViewSet(ScopedModelViewSet):
     """تعریف کالا و نرخ‌گذاری توسط اتحادیه"""
 
     serializer_class = ProductSerializer
-    read_roles = ("governorate", "chamber", "union")
-    write_roles = ("union",)
+    read_roles = ("governorate", "samt", "chamber", "union")
+    write_roles = ("union", "samt", "chamber")
     filterset_fields = ["union", "category", "commodity", "is_active", "union__chamber"]
     search_fields = ["name"]
     ordering_fields = ["name", "current_price", "price_changed_at"]
@@ -106,17 +117,19 @@ class ProductViewSet(ScopedModelViewSet):
     @action(detail=True, methods=["post"])
     def set_price(self, request, pk=None):
         product = self.get_object()
-        if request.user.role not in (Role.UNION, Role.ADMIN):
-            raise ValidationError({"detail": "فقط اتحادیه نرخ تعیین می‌کند."})
+        if request.user.role not in (Role.UNION, Role.SAMT, Role.CHAMBER, Role.GOVERNORATE, Role.ADMIN):
+            raise ValidationError({"detail": "شما مجاز به تعیین نرخ نیستید."})
         try:
             price = int(request.data.get("price"))
         except (TypeError, ValueError):
             raise ValidationError({"price": "نرخ را به ریال وارد کنید."})
-        services.set_official_price(
+        record = services.set_official_price(
             product, price, request.user, request.data.get("max_discount_percent"), request.data.get("note", "")
         )
         product.refresh_from_db()
-        return Response(ProductSerializer(product, context={"request": request}).data)
+        data = ProductSerializer(product, context={"request": request}).data
+        data["submitted_status"] = record.status
+        return Response(data)
 
     @action(detail=True)
     def history(self, request, pk=None):

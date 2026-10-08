@@ -303,12 +303,14 @@ class ShopTests(Base):
         r = self.client_for(store.owner).post("/api/shop-products/", {"name": "x", "price": 100})
         self.assertEqual(r.status_code, 400)
 
-    def test_public_shop_hides_inactive_products(self):
+    def test_public_shop_shows_only_approved_and_active_products(self):
         from apps.shop.models import ShopProduct
 
         store = self.stores[0]
-        ShopProduct.objects.create(store=store, name="نمایش‌داده‌شده", price=1000)
-        ShopProduct.objects.create(store=store, name="پنهان", price=2000, is_active=False)
+        ok = ShopProduct.Status.APPROVED
+        ShopProduct.objects.create(store=store, name="نمایش‌داده‌شده", price=1000, status=ok)
+        ShopProduct.objects.create(store=store, name="پنهان", price=2000, is_active=False, status=ok)
+        ShopProduct.objects.create(store=store, name="در انتظار تایید صمت", price=3000)
         rows = APIClient().get(f"/api/public/stores/{store.pk}/shop/").data
         self.assertEqual([r["name"] for r in rows], ["نمایش‌داده‌شده"])
 
@@ -736,3 +738,81 @@ class SamtStoreManagementTests(Base):
         r = self._new_store(self.client_for(self.uni), owner_mobile="09351115555")
         self.assertEqual(r.status_code, 201, r.data)
         self.assertEqual(Store.objects.get(pk=r.data["id"]).union, self.union)
+
+
+class OtherGoodsApprovalTests(Base):
+    """کالاهای غیراساسی: قیمت آزاد است اما تا تایید کارشناس صمت عمومی نمی‌شود."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000013", role=Role.SAMT, province=cls.prov)
+
+    def _add(self, **over):
+        body = {"name": "زعفران قائنات", "price": 9_500_000, "unit": "piece",
+                "is_active": True, "is_available": True}
+        body.update(over)
+        return self.client_for(self.stores[0].owner).post("/api/shop-products/", body, format="json")
+
+    def test_new_product_waits_for_samt_and_is_hidden_from_public(self):
+        from apps.shop.models import ShopProduct
+
+        r = self._add()
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["status"], ShopProduct.Status.PENDING)
+        # ویترین عمومی فروشگاه هنوز آن را نشان نمی‌دهد
+        pub = self.client.get(f"/api/public/stores/{self.stores[0].pk}/shop/")
+        self.assertEqual([p["id"] for p in pub.data], [])
+
+        pid = r.data["id"]
+        c = self.client_for(self.samt)
+        self.assertEqual(c.get("/api/other-prices/", {"status": "pending"}).data["count"], 1)
+        self.assertEqual(c.post(f"/api/other-prices/{pid}/approve/").status_code, 200)
+
+        pub = self.client.get(f"/api/public/stores/{self.stores[0].pk}/shop/")
+        self.assertEqual([p["id"] for p in pub.data], [pid])
+        self.assertEqual(self.client.get("/api/public/shop-products/").data["count"], 1)
+
+    def test_rejection_needs_a_reason_and_keeps_product_hidden(self):
+        pid = self._add().data["id"]
+        c = self.client_for(self.samt)
+        self.assertEqual(c.post(f"/api/other-prices/{pid}/reject/").status_code, 400)
+        r = c.post(f"/api/other-prices/{pid}/reject/", {"note": "قیمت غیرمتعارف است"})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["status"], "rejected")
+        self.assertEqual(self.client.get(f"/api/public/stores/{self.stores[0].pk}/shop/").data, [])
+
+    def test_price_edit_sends_an_approved_product_back_to_the_queue(self):
+        pid = self._add().data["id"]
+        samt = self.client_for(self.samt)
+        samt.post(f"/api/other-prices/{pid}/approve/")
+        owner = self.client_for(self.stores[0].owner)
+
+        # تغییر فیلد بی‌اثر تاییدیه را باطل نمی‌کند
+        owner.patch(f"/api/shop-products/{pid}/", {"is_available": False}, format="json")
+        self.assertEqual(owner.get(f"/api/shop-products/{pid}/").data["status"], "approved")
+
+        # اما تغییر قیمت، دوباره نیاز به تایید دارد
+        r = owner.patch(f"/api/shop-products/{pid}/", {"price": 15_000_000}, format="json")
+        self.assertEqual(r.data["status"], "pending", r.data)
+        self.assertEqual(self.client.get(f"/api/public/stores/{self.stores[0].pk}/shop/").data, [])
+
+    def test_union_may_watch_but_only_samt_approves(self):
+        pid = self._add().data["id"]
+        uni = self.client_for(self.uni)
+        self.assertEqual(uni.get("/api/other-prices/").data["count"], 1)      # می‌بیند
+        self.assertEqual(uni.post(f"/api/other-prices/{pid}/approve/").status_code, 403)  # تایید نمی‌کند
+        # صمت استان دیگر اصلا این محصول را نمی‌بیند
+        other = User.objects.create_user("09120000014", role=Role.SAMT, province=self.prov2)
+        self.assertEqual(self.client_for(other).get(f"/api/other-prices/{pid}/").status_code, 404)
+
+
+class ReviewAuthTests(Base):
+    """ثبت نظر و امتیاز فقط برای کاربر واردشده به سامانه ممکن است."""
+
+    def test_anonymous_cannot_review_but_logged_in_citizen_can(self):
+        url = f"/api/public/stores/{self.stores[0].pk}/reviews/"
+        self.assertEqual(self.client.post(url, {"rating": 5}).status_code, 401)
+        r = self.client_for(self.citizen).post(url, {"rating": 5, "comment": "عالی بود"})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["rating_count"], 1)

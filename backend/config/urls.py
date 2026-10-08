@@ -39,6 +39,7 @@ router.register("shares", distribution.ShareViewSet, basename="share")
 router.register("quotas", distribution.QuotaViewSet, basename="quota")
 router.register("shop-categories", shop.ShopCategoryViewSet, basename="shop-category")
 router.register("shop-products", shop.MyShopProductViewSet, basename="shop-product")
+router.register("other-prices", shop.ShopPriceReviewViewSet, basename="other-price")
 router.register("orders", orders.OrderViewSet, basename="order")
 router.register("public/geo", orgs.PublicGeoViewSet, basename="public-geo")
 

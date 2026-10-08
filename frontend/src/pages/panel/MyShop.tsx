@@ -13,6 +13,7 @@ type ShopProductT = {
   name: string; description: string; image: string | null; price: number; old_price: number | null;
   discount_percent: number | null; unit: string; unit_display: string; brand: string;
   is_available: boolean; is_active: boolean; order: number;
+  status: string; status_display: string; review_note: string;
 };
 type Category = { id: number; name: string };
 
@@ -93,6 +94,7 @@ export default function MyShop() {
                   : <span className="grid size-full place-items-center text-muted"><Package className="size-8" /></span>}
                 <div className="absolute right-2 top-2 flex gap-1">
                   {!p.is_active && <Badge tone="neutral">پنهان</Badge>}
+                  <Badge tone={p.status === "approved" ? "ok" : p.status === "rejected" ? "danger" : "warn"}>{p.status_display}</Badge>
                   {!p.is_available && <Badge tone="warn">ناموجود</Badge>}
                   {p.discount_percent ? <Badge tone="ok">{num(p.discount_percent)}٪ تخفیف</Badge> : null}
                 </div>

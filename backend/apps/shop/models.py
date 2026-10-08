@@ -6,6 +6,7 @@
   • اینجا فروشگاه محصولات خودش را تعریف می‌کند و قیمت را خودش تعیین می‌کند؛
     هیچ سقف/کف نرخی اعمال نمی‌شود. یک ابزار تشویقی برای عضویت فروشندگان است.
 """
+from django.conf import settings
 from django.db import models
 
 from apps.core.models import TimeStamped
@@ -28,7 +29,13 @@ class ShopCategory(TimeStamped):
 
 
 class ShopProduct(TimeStamped):
-    """محصول اختصاصی یک فروشگاه؛ قیمت آزاد و بدون وابستگی به نرخ مصوب اتحادیه."""
+    """محصول اختصاصی یک فروشگاه (کالای غیراساسی)؛ قیمت آزاد است اما پیش از نمایش
+    عمومی باید کارشناس اداره صمت آن را تایید کند."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "در انتظار تایید صمت"
+        APPROVED = "approved", "تاییدشده"
+        REJECTED = "rejected", "رد شده"
 
     class Unit(models.TextChoices):
         PIECE = "piece", "عدد"
@@ -60,6 +67,13 @@ class ShopProduct(TimeStamped):
     is_active = models.BooleanField("نمایش در فروشگاه", default=True, db_index=True)
     order = models.PositiveSmallIntegerField("ترتیب نمایش", default=0)
 
+    status = models.CharField("وضعیت تایید", max_length=10, choices=Status.choices,
+                              default=Status.PENDING, db_index=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="+", verbose_name="بررسی‌کننده")
+    reviewed_at = models.DateTimeField("زمان بررسی", null=True, blank=True)
+    review_note = models.CharField("توضیح بررسی", max_length=300, blank=True)
+
     SCOPE = {
         "province": "store__union__chamber__county__province",
         "chamber": "store__union__chamber",
@@ -71,10 +85,15 @@ class ShopProduct(TimeStamped):
         verbose_name = "محصول فروشگاه"
         verbose_name_plural = "محصولات فروشگاه‌ها"
         ordering = ["order", "-created_at"]
-        indexes = [models.Index(fields=["store", "is_active", "is_available"])]
+        indexes = [models.Index(fields=["store", "is_active", "is_available", "status"])]
 
     def __str__(self):
         return f"{self.name} ({self.store.name})"
+
+    @property
+    def is_public(self) -> bool:
+        """فقط محصول تاییدشده و فعال به مردم نمایش داده می‌شود."""
+        return self.status == self.Status.APPROVED and self.is_active
 
     @property
     def discount_percent(self):

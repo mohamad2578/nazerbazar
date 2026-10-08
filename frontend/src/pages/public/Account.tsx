@@ -1,4 +1,4 @@
-import { LayoutDashboard, LogOut, Search, ShieldAlert, ShoppingCart, Store } from "lucide-react";
+import { LayoutDashboard, LogOut, Search, ShieldAlert, Store } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Badge, Button, Card } from "../../components/ui";
 import { isPanelUser, useAuth } from "../../lib/auth";
@@ -16,7 +16,6 @@ export default function Account() {
       </Card>
       <Card className="divide-y divide-line">
         {isPanelUser(user) && <Row to="/panel" icon={<LayoutDashboard className="size-5" />} label="ورود به پنل" />}
-        <Row to="/orders" icon={<ShoppingCart className="size-5" />} label="سفارش‌های من" />
         <Row to="/track" icon={<Search className="size-5" />} label="گزارش‌های من و پیگیری" />
         <Row to="/report" icon={<ShieldAlert className="size-5" />} label="ثبت گزارش تخلف" />
         {user.role === "citizen" && !user.store && <Row to="/register-store" icon={<Store className="size-5" />} label="ثبت‌نام فروشگاه (صاحبان صنف)" />}

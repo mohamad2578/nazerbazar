@@ -162,7 +162,7 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
           <Link to={`/s/${s.id}`} className="flex flex-wrap items-center gap-1.5 font-medium">
             <span className="truncate">{s.name}</span>
             {s.is_verified && <BadgeCheck className="size-4 shrink-0 text-brand" aria-label="احراز شده" />}
-            {o.shop_products > 0 && <Badge tone="brand">فروش اینترنتی</Badge>}
+            {o.shop_products > 0 && <Badge tone="brand">سایر محصولات</Badge>}
           </Link>
           <div className="mt-0.5 line-clamp-1 text-xs text-muted">{s.address}</div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -193,7 +193,7 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
         >
           <span className="flex items-center gap-2 text-sm font-semibold">
             <ShoppingBag className="size-5" />
-            خرید اینترنتی از این فروشگاه
+            برای مشاهده سایر محصولات این فروشگاه کلیک کنید
           </span>
           <span className="flex items-center gap-1 text-xs opacity-90">
             {num(o.shop_products)} محصول

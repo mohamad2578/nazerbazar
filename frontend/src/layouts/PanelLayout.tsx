@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
-  Package, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
+  Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -24,7 +24,8 @@ export const NAV: Item[] = [
   { to: "/panel", label: "داشبورد", icon: Home, roles: [...M, "store"], end: true, mobile: true },
   { to: "/panel/prices", label: "قیمت‌های من", icon: Tags, roles: ["store"], mobile: true },
   { to: "/panel/stores", label: "فروشگاه‌ها", icon: Store, roles: M, mobile: true },
-  { to: "/panel/products", label: "کالاها و نرخ مصوب", icon: Package, roles: M, mobile: true },
+  { to: "/panel/products", label: "نرخ مصوب کالاهای اساسی", icon: Package, roles: M, mobile: true },
+  { to: "/panel/other-prices", label: "نرخ مصوب سایر کالاها", icon: PackageSearch, roles: M, mobile: true },
   { to: "/panel/price-approvals", label: "تایید نرخ‌ها", icon: ClipboardCheck, roles: REVIEW, mobile: true },
   { to: "/panel/price-upload", label: "بارگذاری نرخ‌ها", icon: FileSpreadsheet, roles: LOAD },
   { to: "/panel/orders", label: "سفارش‌ها", icon: ShoppingCart, roles: [...M, "store"], mobile: true },

@@ -292,11 +292,18 @@ def _offer_row(o, request, lat=None, lng=None, now=None, shop_counts=None):
 
 
 def _shop_counts(store_ids) -> dict[int, int]:
-    """شمار محصولات فعال و موجودِ ویترین اینترنتی، به تفکیک فروشگاه."""
+    """شمار «سایر محصولات» قابل نمایش به عموم، به تفکیک فروشگاه.
+
+    فقط محصولاتی شمرده می‌شوند که کارشناس اداره صمت تاییدشان کرده باشد؛ همان‌هایی که
+    در صفحه عمومی فروشگاه دیده می‌شوند.
+    """
     from apps.shop.models import ShopProduct
 
     rows = (
-        ShopProduct.objects.filter(store_id__in=store_ids, is_active=True, is_available=True)
+        ShopProduct.objects.filter(
+            store_id__in=store_ids, is_active=True, is_available=True,
+            status=ShopProduct.Status.APPROVED,
+        )
         .values("store_id")
         .annotate(n=Count("pk"))
     )

@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, Clock, MapPin, Minus, Package, Phone, Plus, ShieldAlert, ShoppingBag, Star, Trash2 } from "lucide-react";
+import { BadgeCheck, Clock, MapPin, Package, Phone, ShieldAlert, ShoppingBag, Star } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, Card, cx, ErrorBox, Loading, Sheet, Textarea, useToast } from "../../components/ui";
 import Directions from "../../components/Directions";
-import ShopCart, { type CartLine } from "../../components/ShopCart";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, num, telLink, toman } from "../../lib/format";
@@ -121,22 +120,12 @@ type ShopProduct = {
   discount_percent: number | null; unit_display: string; brand: string; category_name: string; is_available: boolean;
 };
 
-/** ویترین فروشگاه اینترنتی: محصولات اختصاصی خود فروشگاه با قیمت آزاد و امکان سفارش. */
+/** سایر محصولات فروشگاه (کالاهای غیراساسی): قیمت آزاد است و پس از تایید اداره صمت
+ *  اینجا نمایش داده می‌شود. فعلا فقط جنبه اطلاع‌رسانی دارد و سفارش اینترنتی ندارد. */
 function ShopSection({ storeId, storeName }: { storeId: number; storeName: string }) {
   const [cat, setCat] = useState("");
-  const [cart, setCart] = useState<Record<number, number>>({});
   const q = useQuery({ queryKey: ["public-shop", storeId], queryFn: () => api.get<ShopProduct[]>(`/public/stores/${storeId}/shop/`) });
   const items = q.data ?? [];
-  const setQty = (id: number, qty: number) =>
-    setCart((c) => {
-      const next = { ...c };
-      if (qty <= 0) delete next[id];
-      else next[id] = Math.min(99, qty);
-      return next;
-    });
-  const lines: CartLine[] = items
-    .filter((p) => cart[p.id])
-    .map((p) => ({ id: p.id, name: p.name, price: p.price, unit_display: p.unit_display, image: p.image, qty: cart[p.id] }));
   if (!items.length) return null;
   const cats = [...new Set(items.map((p) => p.category_name).filter(Boolean))];
   const shown = cat ? items.filter((p) => p.category_name === cat) : items;
@@ -144,11 +133,11 @@ function ShopSection({ storeId, storeName }: { storeId: number; storeName: strin
     <section>
       <div className="mb-1 flex items-center gap-2">
         <ShoppingBag className="size-5 text-brand" />
-        <h2 className="font-semibold">فروشگاه اینترنتی {storeName}</h2>
+        <h2 className="font-semibold">سایر محصولات {storeName}</h2>
       </div>
       <p className="mb-3 text-xs text-muted">
-        محصولات اختصاصی این فروشگاه؛ قیمت‌ها را خود فروشنده تعیین می‌کند. برای خرید اینترنتی، کالاها را به سبد اضافه کنید
-        و سفارش را ثبت کنید؛ سفارش شما در کارتابل همین فروشگاه قرار می‌گیرد و فروشنده برای هماهنگی تماس می‌گیرد.
+        کالاهای غیراساسی این فروشگاه؛ قیمت را خود فروشنده تعیین می‌کند و پس از تایید کارشناس اداره صمت
+        اینجا نمایش داده می‌شود. برای خرید یا اطلاع از موجودی، با شماره تماس فروشگاه هماهنگ کنید.
       </p>
       {cats.length > 1 && (
         <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
@@ -175,30 +164,13 @@ function ShopSection({ storeId, storeName }: { storeId: number; storeName: strin
                 <span className="font-bold tabular">{toman(p.price)}</span>
                 {p.old_price ? <span className="text-[11px] text-muted line-through tabular">{toman(p.old_price, false)}</span> : null}
               </div>
-              {p.is_available ? (
-                cart[p.id] ? (
-                  <div className="mt-2 flex items-center justify-between rounded-xl bg-surface-2 p-1">
-                    <button onClick={() => setQty(p.id, cart[p.id] - 1)} className="grid size-8 place-items-center rounded-lg bg-surface" aria-label="کمتر">
-                      {cart[p.id] === 1 ? <Trash2 className="size-4 text-danger" /> : <Minus className="size-4" />}
-                    </button>
-                    <span className="tabular text-sm font-medium">{num(cart[p.id])}</span>
-                    <button onClick={() => setQty(p.id, cart[p.id] + 1)} className="grid size-8 place-items-center rounded-lg bg-surface" aria-label="بیشتر">
-                      <Plus className="size-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => setQty(p.id, 1)} className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-brand-soft text-sm font-medium text-brand">
-                    <Plus className="size-4" /> افزودن به سبد
-                  </button>
-                )
-              ) : (
+              {!p.is_available && (
                 <div className="mt-2 grid h-9 place-items-center rounded-xl bg-surface-2 text-xs text-muted">ناموجود</div>
               )}
             </div>
           </Card>
         ))}
       </div>
-      <ShopCart storeId={storeId} storeName={storeName} lines={lines} setQty={setQty} clear={() => setCart({})} />
     </section>
   );
 }

@@ -1,0 +1,19 @@
+// محل نصب: /etc/bind/named.conf.options
+// نکته امنیتی مهم: recursion باید خاموش باشد، وگرنه سرور شما به یک open resolver
+// تبدیل می‌شود و در حملات تقویتی DNS سوءاستفاده خواهد شد.
+
+options {
+    directory "/var/cache/bind";
+
+    recursion no;                 // فقط به دامنه‌های خودمان پاسخ می‌دهیم
+    allow-query { any; };         // پرس‌وجوی عمومی برای همان دامنه‌ها آزاد است
+    allow-transfer { none; };
+
+    version none;                 // نسخه BIND را فاش نکن
+    rate-limit { responses-per-second 15; };
+
+    dnssec-validation no;         // چون recursive نیستیم لازم نیست
+
+    listen-on { any; };
+    listen-on-v6 { any; };
+};

@@ -1,0 +1,25 @@
+; فایل zone دامنه nazer724.ir — سرور: 171.22.24.139
+; پس از هر ویرایش، شماره serial را یک واحد زیاد کنید وگرنه تغییر منتشر نمی‌شود.
+$TTL    3600
+$ORIGIN nazer724.ir.
+
+@       IN      SOA     ns1.nazer724.ir. admin.nazer724.ir. (
+                        2026100901      ; serial (YYYYMMDDnn)
+                        3600            ; refresh
+                        900             ; retry
+                        1209600         ; expire
+                        3600 )          ; negative cache TTL
+
+; ── نیم‌سرورها ─────────────────────────────────────────────
+@       IN      NS      ns1.nazer724.ir.
+@       IN      NS      ns2.nazer724.ir.
+
+ns1     IN      A       171.22.24.139
+ns2     IN      A       171.22.24.139
+
+; ── رکوردهای سایت ──────────────────────────────────────────
+@       IN      A       171.22.24.139
+www     IN      A       171.22.24.139
+
+; صدور گواهی HTTPS فقط از Let's Encrypt مجاز باشد
+@       IN      CAA     0 issue "letsencrypt.org"

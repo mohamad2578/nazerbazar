@@ -1,0 +1,8 @@
+// منطقه‌های میزبانی‌شده روی این سرور.
+// محل نصب: /etc/bind/named.conf.local  (محتوای قبلی را حفظ کنید و این را به انتهایش اضافه کنید)
+
+zone "nazer724.ir" {
+    type master;
+    file "/etc/bind/zones/db.nazer724.ir";
+    allow-transfer { none; };
+};

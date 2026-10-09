@@ -13,7 +13,7 @@ export default function News() {
   const items = q.data ?? [];
   return (
     <div className="space-y-5">
-      <PageHeader title="اخبار" subtitle="اطلاعیه‌ها و اخبار اداره صمت و سامانه" />
+      <PageHeader title="اخبار" />
       {q.isLoading ? <Loading /> : !items.length ? (
         <Card><Empty title="هنوز خبری منتشر نشده است" icon={<Newspaper className="size-7" />} /></Card>
       ) : (

@@ -13,7 +13,7 @@ export default function Login() {
   const [params] = useSearchParams();
   const nav = useNavigate();
   const next = params.get("next");
-  const [mode, setMode] = useState<"otp" | "password" | "register">("otp");
+  const [mode, setMode] = useState<"otp" | "password" | "register">("register");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [regErrors, setRegErrors] = useState<Record<string, string>>({});
@@ -76,9 +76,9 @@ export default function Login() {
               setError("");
             }}
             options={[
-              { value: "otp", label: <span className="inline-flex items-center gap-1"><Smartphone className="size-4" /> کد پیامکی</span> },
-              { value: "password", label: <span className="inline-flex items-center gap-1"><KeyRound className="size-4" /> رمز عبور</span> },
               { value: "register", label: <span className="inline-flex items-center gap-1"><UserPlus className="size-4" /> ثبت‌نام</span> },
+              { value: "password", label: <span className="inline-flex items-center gap-1"><KeyRound className="size-4" /> رمز عبور</span> },
+              { value: "otp", label: <span className="inline-flex items-center gap-1"><Smartphone className="size-4" /> کد پیامکی</span> },
             ]}
           />
         </div>

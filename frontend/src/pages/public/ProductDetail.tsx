@@ -4,7 +4,6 @@ import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Directions from "../../components/Directions";
 import { ProductThumb } from "../../components/ProductCard";
-import Sparkline from "../../components/Sparkline";
 import { Badge, Card, cx, Empty, ErrorBox, Loading, Segmented } from "../../components/ui";
 import { api } from "../../lib/api";
 import { ago, km, num, telLink, toman } from "../../lib/format";
@@ -46,7 +45,6 @@ export default function ProductDetail() {
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} retry={() => q.refetch()} />;
   const p = q.data!;
-  const history = p.history.map((h) => h.price);
 
   return (
     <div className="space-y-4">
@@ -58,34 +56,14 @@ export default function ProductDetail() {
         <div className="flex gap-4">
           <ProductThumb src={p.image} name={p.name} size="size-16 sm:size-20" />
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold sm:text-xl">{p.name}</h1>
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <h1 className="text-lg font-bold sm:text-xl">{p.name}</h1>
+              {p.price_changed_at && <span className="text-[11px] text-muted">به‌روزرسانی {ago(p.price_changed_at)}</span>}
+            </div>
             <p className="mt-0.5 text-sm text-muted">
               {p.union_name} · {p.county_name} · هر {p.unit_display}
             </p>
           </div>
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1.2fr]">
-          <div>
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span className="text-xs text-muted">نرخ مصوب اتحادیه</span>
-              <span className="text-xl font-bold tabular">{toman(p.official_price)}</span>
-            </div>
-            <div className="mt-1 text-xs text-muted">
-              فروش مجاز: از <b className="tabular text-ink">{toman(p.min_allowed_price)}</b> تا <b className="tabular text-ink">{toman(p.official_price)}</b>
-              {p.price_changed_at && <> · به‌روزرسانی {ago(p.price_changed_at)}</>}
-            </div>
-          </div>
-          {history.length > 1 && (
-            <div>
-              <div className="mb-1 text-xs text-muted">روند نرخ مصوب</div>
-              <Sparkline values={history} />
-            </div>
-          )}
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <Mini label="فروشگاه" value={num(p.offers_count)} />
-          <Mini label="کمترین قیمت" value={p.min_price ? toman(p.min_price, false) : "—"} />
-          <Mini label="میانگین" value={p.avg_price ? toman(p.avg_price, false) : "—"} />
         </div>
       </Card>
 
@@ -139,15 +117,6 @@ export default function ProductDetail() {
         قیمت‌ها از کمترین به بیشترین مرتب شده‌اند. فروشگاه‌ها مجازند حداکثر {num(p.max_discount_percent)}٪ کمتر از نرخ مصوب بفروشند.
         اگر نرخ مصوب تغییر کند و فروشگاهی ظرف ۲۴ ساعت قیمت خود را به‌روز نکند، تا زمان به‌روزرسانی در این فهرست نمایش داده نمی‌شود.
       </p>
-    </div>
-  );
-}
-
-function Mini({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-surface-2 px-2 py-1.5">
-      <div className="text-[10px] text-muted">{label}</div>
-      <div className="text-xs font-semibold tabular">{value}</div>
     </div>
   );
 }

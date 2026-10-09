@@ -3,6 +3,7 @@ from datetime import timedelta
 from io import BytesIO
 
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
@@ -816,3 +817,67 @@ class ReviewAuthTests(Base):
         r = self.client_for(self.citizen).post(url, {"rating": 5, "comment": "عالی بود"})
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(r.data["rating_count"], 1)
+
+
+class ChainStoreTests(Base):
+    """فروشگاه فاقد اتحادیه (زنجیره‌ای، جهاد، حامی): روی کالاهای اتحادیه‌های تحت پوشش قیمت می‌دهد."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000015", role=Role.SAMT, province=cls.prov)
+        cls.second = Union.objects.create(chamber=cls.chamber, name="اتحادیه دوم")
+        cls.prod2 = Product.objects.create(union=cls.second, name="شکر", unit="kg")
+        set_official_price(cls.prod2, 500_000, cls.cham)
+
+    def _chain(self, client=None, **over):
+        body = {"name": "فروشگاه زنجیره‌ای رفاه", "address": "همدان، بلوار ارم",
+                "owner_mobile": "09371234567", "password": "chainpass123",
+                "union": None, "covered_unions": [self.union.pk, self.second.pk]}
+        body.update(over)
+        return (client or self.client_for(self.samt)).post("/api/stores/", body, format="json")
+
+    def test_store_without_union_covers_several_unions(self):
+        r = self._chain()
+        self.assertEqual(r.status_code, 201, r.data)
+        store = Store.objects.get(pk=r.data["id"])
+        self.assertIsNone(store.union)
+        self.assertCountEqual(store.priceable_union_ids(), [self.union.pk, self.second.pk])
+        self.assertIn("فاقد اتحادیه", r.data["union_name"])
+        self.assertEqual(r.data["county_name"], "همدان")
+
+        # روی کالای هر دو اتحادیه می‌تواند قیمت بدهد
+        upsert_offer(store, self.product, self.product.current_price, True)
+        upsert_offer(store, self.prod2, self.prod2.current_price, True)
+        self.assertEqual(store.offers.count(), 2)
+
+    def test_either_union_or_covered_unions_is_required(self):
+        r = self._chain(covered_unions=[])
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("covered_unions", r.data)
+        # و نمی‌توان هم‌زمان هر دو را داشت
+        r = self._chain(union=self.union.pk, owner_mobile="09371234568")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("union", r.data)
+
+    def test_chain_store_cannot_price_a_union_it_does_not_cover(self):
+        store = Store.objects.get(pk=self._chain(covered_unions=[self.second.pk]).data["id"])
+        with self.assertRaises(ValidationError):
+            upsert_offer(store, self.product, self.product.current_price, True)
+
+    def test_officials_see_the_chain_store_through_its_covered_unions(self):
+        sid = self._chain(covered_unions=[self.union.pk]).data["id"]
+        # اتحادیه تحت پوشش آن را در کارتابل خود می‌بیند
+        self.assertEqual(self.client_for(self.uni).get(f"/api/stores/{sid}/").status_code, 200)
+        # اتحادیه‌ای که پوشش داده نشده، نمی‌بیند
+        self.assertEqual(self.client_for(self.uni2).get(f"/api/stores/{sid}/").status_code, 404)
+        # اتاق اصناف و صمت استان می‌بینند
+        self.assertEqual(self.client_for(self.cham).get(f"/api/stores/{sid}/").status_code, 200)
+        self.assertEqual(self.client_for(self.samt).get(f"/api/stores/{sid}/").status_code, 200)
+
+    def test_store_panel_lists_products_of_every_covered_union(self):
+        store = Store.objects.get(pk=self._chain().data["id"])
+        rows = self.client_for(store.owner).get("/api/store/catalog/").data["items"]
+        names = {r["name"] for r in rows}
+        self.assertIn(self.product.name, names)
+        self.assertIn("شکر", names)

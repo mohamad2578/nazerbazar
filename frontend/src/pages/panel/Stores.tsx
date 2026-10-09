@@ -14,7 +14,7 @@ type StoreT = {
   id: number; name: string; union_name: string; county_name: string; license_no: string; phone: string; address: string;
   status: string; status_display: string; status_reason: string; is_verified: boolean; rating_avg: string; owner_name: string;
   owner_mobile: string; offers_count: number; created_at: string; license_image: string | null; lat: string; lng: string;
-  union?: number; working_hours?: string;
+  union?: number | null; covered_unions?: number[]; covered_union_names?: string[]; working_hours?: string;
 };
 
 /** نقش‌هایی که اجازه تعریف و مدیریت فروشگاه دارند. */
@@ -197,14 +197,23 @@ function StoreForm({ store, onClose }: { store?: StoreT; onClose: () => void }) 
   const qc = useQueryClient();
   const toast = useToast();
   const [f, setF] = useState<Record<string, string>>(() => ({
-    name: store?.name ?? "", union: String(store?.union ?? ""), license_no: store?.license_no ?? "",
+    name: store?.name ?? "", license_no: store?.license_no ?? "",
     phone: store?.phone ?? "", address: store?.address ?? "", working_hours: store?.working_hours ?? "",
     owner_mobile: store?.owner_mobile ?? "", owner_first_name: "", owner_last_name: "", password: "",
   }));
+  // «فاقد اتحادیه» برای فروشگاه‌های زنجیره‌ای، جهاد، حامی و مانند آن‌ها
+  const NONE = "none";
+  const [union, setUnion] = useState<string>(() =>
+    store ? (store.union ? String(store.union) : store.covered_unions?.length ? NONE : "") : "");
+  const [covered, setCovered] = useState<number[]>(() => store?.covered_unions ?? []);
+  const toggleCovered = (id: number) =>
+    setCovered((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
   const unions = useQuery({ queryKey: ["options", "/unions/"], queryFn: () => api.get<Page<{ id: number; name: string; chamber_name: string }>>("/unions/", { page_size: 500 }) });
   const m = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = { ...f };
+      body.union = union === NONE || !union ? null : Number(union);
+      body.covered_unions = union === NONE ? covered : [];
       if (!body.password) delete body.password;
       if (store) { delete body.owner_first_name; delete body.owner_last_name; }
       return store ? api.patch(`/stores/${store.id}/`, body) : api.post("/stores/", body);
@@ -224,9 +233,10 @@ function StoreForm({ store, onClose }: { store?: StoreT; onClose: () => void }) 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="نام فروشگاه" error={err.name}><Input value={f.name} onChange={set("name")} /></Field>
         <Field label="اتحادیه" error={err.union}>
-          <Select value={f.union} onChange={set("union")}>
+          <Select value={union} onChange={(e) => setUnion(e.target.value)}>
             <option value="">—</option>
             {(unions.data?.results ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}{u.chamber_name ? ` (${u.chamber_name})` : ""}</option>)}
+            <option value={NONE}>فاقد اتحادیه (زنجیره‌ای، جهاد، حامی و …)</option>
           </Select>
         </Field>
         <Field label="شماره پروانه کسب" error={err.license_no}><Input value={f.license_no} onChange={set("license_no")} dir="ltr" /></Field>
@@ -234,6 +244,25 @@ function StoreForm({ store, onClose }: { store?: StoreT; onClose: () => void }) 
         <Field label="نشانی" error={err.address} className="sm:col-span-2"><Textarea value={f.address} onChange={set("address")} className="min-h-16" /></Field>
         <Field label="ساعت کاری" error={err.working_hours} className="sm:col-span-2"><Input value={f.working_hours} onChange={set("working_hours")} placeholder="مثلا ۸ تا ۲۲" /></Field>
       </div>
+
+      {union === NONE && (
+        <div className="mt-4 rounded-2xl border border-line bg-surface-2 p-4">
+          <h3 className="text-sm font-semibold">کالاهای کدام اتحادیه‌ها به این فروشگاه نمایش داده شود؟</h3>
+          <p className="mt-1 text-xs text-muted">
+            این فروشگاه عضو اتحادیه نیست، اما می‌تواند روی کالاهای اتحادیه‌های انتخابی قیمت پیشنهادی بدهد.
+            فروشگاه‌های زنجیره‌ای معمولا کالاهای چند اتحادیه را پوشش می‌دهند.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {(unions.data?.results ?? []).map((u) => (
+              <label key={u.id} className="flex items-center gap-2 rounded-xl bg-surface p-2.5 text-sm">
+                <input type="checkbox" className="size-4" checked={covered.includes(u.id)} onChange={() => toggleCovered(u.id)} />
+                {u.name}
+              </label>
+            ))}
+          </div>
+          {err.covered_unions && <p className="mt-2 text-xs text-danger">{err.covered_unions}</p>}
+        </div>
+      )}
 
       <div className="mt-5 border-t border-line pt-4">
         <h3 className="mb-3 text-sm font-semibold">حساب کاربری مالک فروشگاه</h3>

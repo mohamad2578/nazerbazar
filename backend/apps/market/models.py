@@ -6,10 +6,12 @@ from django.db import models
 
 from apps.core.models import TimeStamped
 
+# فروشگاه ممکن است عضو اتحادیه نباشد (زنجیره‌ای)؛ در آن حالت از مسیر اتحادیه‌های
+# تحت پوشش در حوزه مسئولان دیده می‌شود.
 STORE_CHAIN_SCOPE = {
-    "province": "store__union__chamber__county__province",
-    "chamber": "store__union__chamber",
-    "union": "store__union",
+    "province": ("store__union__chamber__county__province", "store__covered_unions__chamber__county__province"),
+    "chamber": ("store__union__chamber", "store__covered_unions__chamber"),
+    "union": ("store__union", "store__covered_unions"),
     "store": "store",
 }
 

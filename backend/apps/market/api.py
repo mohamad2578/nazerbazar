@@ -12,7 +12,7 @@ from apps.accounts.models import Role
 from apps.core.permissions import role_permission
 from apps.core.utils import haversine_km
 from apps.core.views import ScopedModelViewSet
-from apps.orgs.models import Store
+from apps.orgs.models import Store, stores_in_county
 
 from . import services
 from .models import Category, OfficialPrice, Product, Review, StoreOffer
@@ -173,12 +173,17 @@ def store_catalog(request):
     now = timezone.now()
     grace = services.grace_period()
     rows = []
-    for p in Product.objects.filter(union=store.union, is_active=True).select_related("category").order_by("name"):
+    products = (
+        Product.objects.filter(union_id__in=store.priceable_union_ids(), is_active=True)
+        .select_related("category", "union").order_by("union__name", "name")
+    )
+    for p in products:
         o = offers.get(p.pk)
         stale = bool(o and p.price_changed_at and o.confirmed_at < p.price_changed_at)
         rows.append({
             "product": p.pk, "name": p.name, "unit_display": p.get_unit_display(),
             "category_name": p.category.name if p.category else "", "image": p.image.url if p.image else None,
+            "union_name": p.union.name,
             "official_price": p.current_price, "min_allowed_price": p.min_allowed_price,
             "max_discount_percent": p.max_discount_percent, "price_changed_at": p.price_changed_at,
             "offer_price": o.price if o else None, "is_available": o.is_available if o else None,
@@ -291,6 +296,12 @@ def _offer_row(o, request, lat=None, lng=None, now=None, shop_counts=None):
     return row
 
 
+def _store_county(s) -> str:
+    """نام شهرستان فروشگاه؛ برای فروشگاه فاقد اتحادیه از اتحادیه‌های تحت پوشش گرفته می‌شود."""
+    union = s.union or s.covered_unions.first()
+    return union.chamber.county.name if union else ""
+
+
 def _shop_counts(store_ids) -> dict[int, int]:
     """شمار «سایر محصولات» قابل نمایش به عموم، به تفکیک فروشگاه.
 
@@ -355,7 +366,7 @@ def public_store_detail(request, pk):
     return Response({
         "id": s.pk, "name": s.name, "address": s.address, "phone": s.phone, "lat": s.lat, "lng": s.lng,
         "working_hours": s.working_hours, "is_verified": s.is_verified, "rating_avg": s.rating_avg,
-        "rating_count": s.rating_count, "union_name": s.union.name, "county_name": s.union.chamber.county.name,
+        "rating_count": s.rating_count, "union_name": s.union_display, "county_name": _store_county(s),
         "photo": request.build_absolute_uri(s.photo.url) if s.photo else None,
         "offers": [
             {"product": o.product_id, "name": o.product.name, "unit_display": o.product.get_unit_display(),
@@ -392,7 +403,7 @@ def public_stats(request):
     stores = Store.objects.filter(status=Store.Status.ACTIVE)
     products = Product.objects.filter(is_active=True, current_price__gt=0)
     if county:
-        stores = stores.filter(union__chamber__county_id=county)
+        stores = stores_in_county(stores, county)
         products = products.filter(union__chamber__county_id=county)
     recent = products.filter(price_changed_at__isnull=False).order_by("-price_changed_at").select_related(
         "union__chamber__county", "category"
@@ -416,15 +427,17 @@ def public_stats(request):
 @permission_classes([AllowAny])
 def public_map(request):
     """نقشه فروشگاه‌های فعال (برای نمای نقشه در سایت)"""
-    qs = Store.objects.filter(status=Store.Status.ACTIVE, lat__isnull=False).select_related("union")
+    qs = (Store.objects.filter(status=Store.Status.ACTIVE, lat__isnull=False)
+          .select_related("union").prefetch_related("covered_unions"))
     if county := request.query_params.get("county"):
-        qs = qs.filter(union__chamber__county_id=county)
+        qs = stores_in_county(qs, county)
     if union := request.query_params.get("union"):
-        qs = qs.filter(union_id=union)
+        # فروشگاه فاقد اتحادیه هم در فهرست اتحادیه‌های تحت پوشش خود دیده می‌شود
+        qs = qs.filter(Q(union_id=union) | Q(covered_unions=union)).distinct()
     stores = list(qs[:2000])
     shop_counts = _shop_counts([s.pk for s in stores])
     return Response([
-        {"id": s.pk, "name": s.name, "lat": s.lat, "lng": s.lng, "union_name": s.union.name,
+        {"id": s.pk, "name": s.name, "lat": s.lat, "lng": s.lng, "union_name": s.union_display,
          "rating_avg": s.rating_avg, "is_verified": s.is_verified,
          "shop_products": shop_counts.get(s.pk, 0)}
         for s in stores

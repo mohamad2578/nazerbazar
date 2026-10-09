@@ -75,9 +75,9 @@ class ShopProduct(TimeStamped):
     review_note = models.CharField("توضیح بررسی", max_length=300, blank=True)
 
     SCOPE = {
-        "province": "store__union__chamber__county__province",
-        "chamber": "store__union__chamber",
-        "union": "store__union",
+        "province": ("store__union__chamber__county__province", "store__covered_unions__chamber__county__province"),
+        "chamber": ("store__union__chamber", "store__covered_unions__chamber"),
+        "union": ("store__union", "store__covered_unions"),
         "store": "store",
     }
 

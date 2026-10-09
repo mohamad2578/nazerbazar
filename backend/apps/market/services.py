@@ -174,8 +174,8 @@ def _apply_price(record: OfficialPrice, product: Product, discount: int) -> None
 def upsert_offer(store: Store, product: Product, price: int, is_available=True) -> StoreOffer:
     if store.status != Store.Status.ACTIVE:
         raise ValidationError({"store": "فروشگاه شما هنوز فعال نشده است."})
-    if product.union_id != store.union_id:
-        raise ValidationError({"product": "این کالا متعلق به اتحادیه شما نیست."})
+    if product.union_id not in store.priceable_union_ids():
+        raise ValidationError({"product": "این کالا متعلق به اتحادیه‌های تحت پوشش شما نیست."})
     if not product.is_active:
         raise ValidationError({"product": "این کالا غیرفعال است."})
     price = int(price)

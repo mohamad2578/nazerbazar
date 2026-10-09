@@ -50,8 +50,9 @@ class UnionSerializer(serializers.ModelSerializer):
 
 
 class StoreSerializer(serializers.ModelSerializer):
-    union_name = serializers.CharField(source="union.name", read_only=True)
-    county_name = serializers.CharField(source="union.chamber.county.name", read_only=True)
+    union_name = serializers.CharField(source="union_display", read_only=True)
+    county_name = serializers.SerializerMethodField()
+    covered_union_names = serializers.SerializerMethodField()
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     owner_name = serializers.CharField(source="owner.full_name", read_only=True)
     owner_mobile = serializers.CharField(source="owner.mobile", read_only=True)
@@ -60,7 +61,8 @@ class StoreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Store
         fields = [
-            "id", "name", "union", "union_name", "county_name", "license_no", "phone", "address", "lat", "lng",
+            "id", "name", "union", "union_name", "covered_unions", "covered_union_names",
+            "county_name", "license_no", "phone", "address", "lat", "lng",
             "working_hours", "photo", "license_image", "status", "status_display", "status_reason",
             "is_verified", "rating_avg", "rating_count", "owner_name", "owner_mobile", "offers_count",
             "created_at", "reviewed_at",
@@ -71,6 +73,29 @@ class StoreSerializer(serializers.ModelSerializer):
 
     def get_offers_count(self, s):
         return s.offers.count()
+
+    def get_county_name(self, s):
+        union = s.union or s.covered_unions.first()
+        return union.chamber.county.name if union else ""
+
+    def get_covered_union_names(self, s):
+        return [u.name for u in s.covered_unions.all()]
+
+    def validate(self, attrs):
+        """فروشگاه یا عضو یک اتحادیه است، یا فاقد اتحادیه با اتحادیه‌های تحت پوشش."""
+        union = attrs.get("union", getattr(self.instance, "union", None))
+        covered = attrs.get("covered_unions")
+        if covered is None and self.instance:
+            covered = list(self.instance.covered_unions.all())
+        if not union and not covered:
+            raise serializers.ValidationError({
+                "covered_unions": "برای فروشگاه فاقد اتحادیه، دست‌کم یک اتحادیه تحت پوشش انتخاب کنید."
+            })
+        if union and covered:
+            raise serializers.ValidationError({
+                "union": "فروشگاه عضو اتحادیه، اتحادیه تحت پوشش جداگانه ندارد."
+            })
+        return attrs
 
 
 class StoreAdminSerializer(StoreSerializer):
@@ -294,7 +319,7 @@ def my_store(request):
             user.save(update_fields=list(profile))
             store = s.save(owner=user)
         notify(
-            User.objects.filter(role=Role.UNION, union=store.union),
+            User.objects.filter(role=Role.UNION, union_id__in=store.priceable_union_ids()),
             "درخواست فعال‌سازی فروشگاه",
             f"{store.name} — {user.full_name}",
             "/panel/stores?status=pending",

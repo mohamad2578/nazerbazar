@@ -88,6 +88,19 @@ class Union(TimeStamped):
         return self.chamber.county
 
 
+def stores_in_county(qs, county_id, prefix=""):
+    """محدودکردن فروشگاه‌ها به یک شهرستان.
+
+    فروشگاه عضو اتحادیه از مسیر اتحادیه خودش و فروشگاه فاقد اتحادیه (زنجیره‌ای) از مسیر
+    اتحادیه‌های تحت پوشش به شهرستان وصل می‌شود؛ هر دو مسیر با OR بررسی می‌شوند.
+    """
+    from django.db.models import Q
+
+    f = f"{prefix}union__chamber__county_id"
+    c = f"{prefix}covered_unions__chamber__county_id"
+    return qs.filter(Q(**{f: county_id}) | Q(**{c: county_id})).distinct()
+
+
 class Store(TimeStamped):
     class Status(models.TextChoices):
         PENDING = "pending", "در انتظار تایید"
@@ -96,7 +109,15 @@ class Store(TimeStamped):
         SUSPENDED = "suspended", "تعلیق"
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="stores", verbose_name="مالک")
-    union = models.ForeignKey(Union, on_delete=models.PROTECT, related_name="stores", verbose_name="اتحادیه")
+    # فروشگاه‌های زنجیره‌ای، جهاد، حامی و مانند آن‌ها عضو هیچ اتحادیه‌ای نیستند؛ برای آن‌ها
+    # union خالی می‌ماند و در covered_unions مشخص می‌شود روی کالاهای کدام اتحادیه‌ها
+    # می‌توانند قیمت اعلام کنند.
+    union = models.ForeignKey(Union, null=True, blank=True, on_delete=models.PROTECT,
+                              related_name="stores", verbose_name="اتحادیه")
+    covered_unions = models.ManyToManyField(
+        Union, blank=True, related_name="covered_stores", verbose_name="اتحادیه‌های تحت پوشش",
+        help_text="برای فروشگاه فاقد اتحادیه: کالاهای کدام اتحادیه‌هایی را عرضه می‌کند",
+    )
     name = models.CharField("نام فروشگاه", max_length=150)
     license_no = models.CharField("شماره پروانه کسب", max_length=50, blank=True)
     phone = models.CharField("تلفن", max_length=20, blank=True)
@@ -116,10 +137,11 @@ class Store(TimeStamped):
     rating_avg = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     rating_count = models.PositiveIntegerField(default=0)
 
+    # فروشگاه فاقد اتحادیه از مسیر اتحادیه‌های تحت پوشش در حوزه مسئولان قرار می‌گیرد
     SCOPE = {
-        "province": "union__chamber__county__province",
-        "chamber": "union__chamber",
-        "union": "union",
+        "province": ("union__chamber__county__province", "covered_unions__chamber__county__province"),
+        "chamber": ("union__chamber", "covered_unions__chamber"),
+        "union": ("union", "covered_unions"),
         "store": "self",
     }
 
@@ -130,6 +152,19 @@ class Store(TimeStamped):
 
     def __str__(self):
         return self.name
+
+    @property
+    def union_display(self) -> str:
+        if self.union_id:
+            return self.union.name
+        names = [u.name for u in self.covered_unions.all()]
+        return "فاقد اتحادیه" + (f" ({'، '.join(names)})" if names else "")
+
+    def priceable_union_ids(self) -> list[int]:
+        """اتحادیه‌هایی که این فروشگاه مجاز است روی کالاهایشان قیمت اعلام کند."""
+        if self.union_id:
+            return [self.union_id]
+        return list(self.covered_unions.values_list("pk", flat=True))
 
     def set_status(self, status, by, reason=""):
         self.status = status

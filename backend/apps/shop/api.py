@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from apps.accounts.models import Role, notify
 from apps.core.permissions import role_permission
 from apps.core.views import ScopedModelViewSet
-from apps.orgs.models import Store
+from apps.orgs.models import Store, stores_in_county
 
 from .models import ShopCategory, ShopProduct
 
@@ -127,7 +127,7 @@ def public_shop_products(request):
         store__status=Store.Status.ACTIVE,
     ).select_related("store", "category")
     if county := request.query_params.get("county"):
-        qs = qs.filter(store__union__chamber__county_id=county)
+        qs = stores_in_county(qs, county, prefix="store__")
     if category := request.query_params.get("category"):
         qs = qs.filter(category_id=category)
     if q := request.query_params.get("q"):

@@ -186,21 +186,19 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
           {o.discount_percent > 0 && <Badge tone="ok" className="mt-1">{num(o.discount_percent, 1)}٪ زیر نرخ</Badge>}
         </div>
       </div>
-      {o.shop_products > 0 && (
-        <Link
-          to={`/s/${s.id}`}
-          className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-brand px-4 py-3 text-brand-ink transition hover:bg-brand-strong"
-        >
-          <span className="flex items-center gap-2 text-sm font-semibold">
-            <ShoppingBag className="size-5" />
-            برای مشاهده سایر محصولات این فروشگاه کلیک کنید
-          </span>
-          <span className="flex items-center gap-1 text-xs opacity-90">
-            {num(o.shop_products)} محصول
-            <ChevronLeft className="size-4" />
-          </span>
-        </Link>
-      )}
+      <Link
+        to={`/s/${s.id}`}
+        className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-brand px-4 py-3 text-brand-ink transition hover:bg-brand-strong"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          <ShoppingBag className="size-5" />
+          برای مشاهده سایر محصولات این فروشگاه کلیک کنید
+        </span>
+        <span className="flex items-center gap-1 text-xs opacity-90">
+          {o.shop_products > 0 ? `${num(o.shop_products)} محصول` : ""}
+          <ChevronLeft className="size-4" />
+        </span>
+      </Link>
       <div className="mt-3 grid grid-cols-3 gap-2">
         <a href={telLink(s.phone)} className={cx("inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-surface-2 text-sm", !s.phone && "pointer-events-none opacity-40")}>
           <Phone className="size-4" /> تماس

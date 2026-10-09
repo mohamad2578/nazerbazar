@@ -19,9 +19,19 @@ export default function RegisterStore() {
   const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [f, setF] = useState({ name: "", union: "", license_no: "", phone: "", address: "", working_hours: "", first_name: user?.first_name ?? "", last_name: user?.last_name ?? "", national_code: user?.national_code ?? "" });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  // «فاقد اتحادیه» برای فروشگاه‌های زنجیره‌ای، جهاد، حامی و مانند آن‌ها
+  const NONE = "none";
+  const [covered, setCovered] = useState<number[]>([]);
+  const noUnion = f.union === NONE;
+  const toggleCovered = (id: number) =>
+    setCovered((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
   const unions = useQuery({ queryKey: ["unions", county], queryFn: () => api.get<UnionT[]>("/public/geo/unions/", { county }), enabled: !!county });
   const m = useMutation({
-    mutationFn: () => api.post("/my-store/", { ...f, national_code: toEn(f.national_code), phone: toEn(f.phone), lat: loc?.lat, lng: loc?.lng }),
+    mutationFn: () => api.post("/my-store/", {
+      ...f, union: noUnion || !f.union ? null : Number(f.union),
+      covered_unions: noUnion ? covered : [],
+      national_code: toEn(f.national_code), phone: toEn(f.phone), lat: loc?.lat, lng: loc?.lng,
+    }),
     onSuccess: () => reload(),
   });
   const err = fieldErrors(m.error);
@@ -70,12 +80,31 @@ export default function RegisterStore() {
             <Select value={f.union} onChange={set("union")} disabled={!county}>
               <option value="">{unions.data && !unions.data.length ? "اتحادیه‌ای ثبت نشده" : "— انتخاب —"}</option>
               {unions.data?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              <option value={NONE}>فاقد اتحادیه (زنجیره‌ای، جهاد، حامی و …)</option>
             </Select>
           </Field>
           <Field label="تلفن فروشگاه" error={err.phone}><Input value={f.phone} onChange={set("phone")} inputMode="tel" dir="ltr" /></Field>
           <Field label="ساعات کاری"><Input value={f.working_hours} onChange={set("working_hours")} placeholder="مثلا ۸ تا ۲۲" /></Field>
           <Field label="نشانی" className="sm:col-span-2" error={err.address}><Input value={f.address} onChange={set("address")} /></Field>
         </div>
+        {noUnion && (
+          <div className="rounded-2xl border border-line bg-surface-2 p-4">
+            <h3 className="text-sm font-semibold">کالاهای کدام اتحادیه‌ها را عرضه می‌کنید؟</h3>
+            <p className="mt-1 text-xs text-muted">
+              چون عضو اتحادیه نیستید، مشخص کنید روی کالاهای کدام اتحادیه‌ها می‌خواهید قیمت اعلام کنید.
+              می‌توانید چند مورد را انتخاب کنید.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {unions.data?.map((u) => (
+                <label key={u.id} className="flex items-center gap-2 rounded-xl bg-surface p-2.5 text-sm">
+                  <input type="checkbox" className="size-4" checked={covered.includes(u.id)} onChange={() => toggleCovered(u.id)} />
+                  {u.name}
+                </label>
+              ))}
+            </div>
+            {err.covered_unions && <p className="mt-2 text-xs text-danger">{err.covered_unions}</p>}
+          </div>
+        )}
         <Field label="موقعیت روی نقشه" error={err.lat} hint="روی نقشه لمس کنید تا محل دقیق فروشگاه ثبت شود.">
           <div className="mb-2">
             <Button type="button" size="sm" variant="soft" icon={<LocateFixed className="size-4" />} onClick={locate}>موقعیت فعلی من</Button>
@@ -85,7 +114,7 @@ export default function RegisterStore() {
           </Suspense>
         </Field>
         {m.error && !Object.keys(err).length && <p className="text-sm text-danger">{(m.error as Error).message}</p>}
-        <Button size="lg" className="w-full" loading={m.isPending} disabled={!f.name || !f.union || !f.address || !loc} onClick={() => m.mutate()}>
+        <Button size="lg" className="w-full" loading={m.isPending} disabled={!f.name || !f.union || (noUnion && !covered.length) || !f.address || !loc} onClick={() => m.mutate()}>
           ارسال درخواست فعال‌سازی
         </Button>
       </Card>

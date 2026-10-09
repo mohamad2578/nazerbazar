@@ -911,3 +911,56 @@ class CitizenRegisterTests(Base):
         self.assertEqual(r.status_code, 400)
         self.assertIn("password", r.data)
         self.assertIn("first_name", r.data)
+
+
+class NewsAndSupplierTests(Base):
+    """اخبار (منتشر‌شده برای عموم، ثبت توسط صمت) و فرم تامین‌کنندگان."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000016", role=Role.SAMT, province=cls.prov)
+
+    def setUp(self):
+        cache.clear()
+
+    def test_samt_publishes_news_and_public_sees_only_published(self):
+        from apps.news.models import NewsItem
+
+        c = self.client_for(self.samt)
+        r = c.post("/api/news/", {"title": "اطلاعیه توزیع", "body": "متن خبر", "is_published": True}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        draft = c.post("/api/news/", {"title": "پیش‌نویس", "body": "x", "is_published": False}, format="json")
+        self.assertEqual(draft.status_code, 201)
+        titles = [n["title"] for n in self.client.get("/api/public/news/").data]
+        self.assertEqual(titles, ["اطلاعیه توزیع"])
+        self.assertEqual(self.client.get(f"/api/public/news/{draft.data['id']}/").status_code, 404)
+        self.assertEqual(NewsItem.objects.get(pk=r.data["id"]).created_by, self.samt)
+
+    def test_union_cannot_write_news(self):
+        r = self.client_for(self.uni).post("/api/news/", {"title": "x", "body": "y"}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_public_supplier_form_validates_and_deduplicates_by_mobile(self):
+        from apps.suppliers.models import Supplier
+
+        url = "/api/public/suppliers/"
+        self.assertEqual(APIClient().post(url, {"first_name": "", "mobile": "x"}, format="json").status_code, 400)
+        body = {"first_name": "علی", "last_name": "رضایی", "mobile": "09351234500", "product_type": "لبنیات"}
+        self.assertEqual(APIClient().post(url, body, format="json").status_code, 201)
+        body["product_type"] = "لبنیات و تخم مرغ"
+        APIClient().post(url, body, format="json")
+        self.assertEqual(Supplier.objects.filter(mobile="09351234500").count(), 1)
+        self.assertEqual(self.client_for(self.samt).get("/api/suppliers/").data[0]["product_type"], "لبنیات و تخم مرغ")
+        self.assertEqual(self.client_for(self.uni).get("/api/suppliers/").status_code, 403)
+
+    def test_products_get_categories_from_their_names(self):
+        from apps.market.services import assign_categories
+        from apps.market.models import Category
+
+        Category.objects.create(name="خواربار", order=1)
+        Category.objects.create(name="میوه و تره‌بار", order=2)
+        Product.objects.create(union=self.union, name="برنج هندی", unit="kg")
+        Product.objects.create(union=self.union, name="سیب زمینی", unit="kg")
+        self.assertEqual(assign_categories(), 2)
+        self.assertEqual(Product.objects.get(name="برنج هندی").category.name, "خواربار")

@@ -17,6 +17,12 @@ const RegisterStore = lazy(() => import("./pages/public/RegisterStore"));
 const Account = lazy(() => import("./pages/public/Account"));
 const MapPage = lazy(() => import("./pages/public/MapPage"));
 const MyOrders = lazy(() => import("./pages/public/MyOrders"));
+const Rates = lazy(() => import("./pages/public/Rates"));
+const Suppliers = lazy(() => import("./pages/public/Suppliers"));
+const News = lazy(() => import("./pages/public/News"));
+const NewsDetail = lazy(() => import("./pages/public/News").then((m) => ({ default: m.NewsDetail })));
+const NewsAdmin = lazy(() => import("./pages/panel/News"));
+const SupplierList = lazy(() => import("./pages/panel/SupplierList"));
 
 const Dashboard = lazy(() => import("./pages/panel/Dashboard"));
 const Stores = lazy(() => import("./pages/panel/Stores"));
@@ -77,6 +83,10 @@ export default function App() {
           <Route path="register-store" element={<RequireAuth><RegisterStore /></RequireAuth>} />
           <Route path="account" element={<RequireAuth><Account /></RequireAuth>} />
           <Route path="orders" element={<RequireAuth><MyOrders /></RequireAuth>} />
+          <Route path="rates" element={<Rates />} />
+          <Route path="suppliers" element={<Suppliers />} />
+          <Route path="news" element={<News />} />
+          <Route path="news/:id" element={<NewsDetail />} />
         </Route>
         <Route path="panel" element={<RequireAuth><RequirePanel><PanelLayout /></RequirePanel></RequireAuth>}>
           <Route index element={<Dashboard />} />
@@ -98,6 +108,8 @@ export default function App() {
           <Route path="reports" element={<RequireAuth roles={MANAGERS}><Reports /></RequireAuth>} />
           <Route path="observatory" element={<RequireAuth roles={["governorate", "chamber", "union"]}><CommodityReports /></RequireAuth>} />
           <Route path="org/:entity" element={<RequireAuth roles={["governorate", "samt", "chamber"]}><Org /></RequireAuth>} />
+          <Route path="news" element={<RequireAuth roles={["samt"]}><NewsAdmin /></RequireAuth>} />
+          <Route path="supplier-list" element={<RequireAuth roles={["samt", "governorate"]}><SupplierList /></RequireAuth>} />
           <Route path="slides" element={<RequireAuth roles={[]}><Slides /></RequireAuth>} />
           <Route path="backup" element={<RequireAuth roles={[]}><Backup /></RequireAuth>} />
         </Route>

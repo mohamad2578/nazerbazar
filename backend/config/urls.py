@@ -9,6 +9,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from apps.accounts import api as accounts
 from apps.analytics import api as analytics
 from apps.cms import api as cms
+from apps.news import api as news
+from apps.suppliers import api as suppliers
 from apps.complaints import api as complaints
 from apps.core import backup_api
 from apps.distribution import api as distribution
@@ -21,6 +23,8 @@ from apps.shop import order_api as orders
 
 router = DefaultRouter()
 router.register("slides", cms.SlideViewSet, basename="slide")
+router.register("news", news.NewsAdminViewSet, basename="news")
+router.register("suppliers", suppliers.SupplierViewSet, basename="supplier")
 router.register("notifications", accounts.NotificationViewSet, basename="notification")
 router.register("users", accounts.UserViewSet, basename="user")
 router.register("provinces", orgs.ProvinceViewSet, basename="province")
@@ -55,6 +59,9 @@ api = [
     path("store/offers/", market.store_save_offers),
     path("store/offers/<int:product_id>/", market.store_remove_offer),
     path("public/slides/", cms.public_slides),
+    path("public/news/", news.public_news),
+    path("public/news/<int:pk>/", news.public_news_detail),
+    path("public/suppliers/", suppliers.public_supplier_register),
     path("public/stats/", market.public_stats),
     path("public/products/", market.public_products),
     path("public/products/<int:pk>/", market.public_product_detail),

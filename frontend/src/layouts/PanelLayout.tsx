@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
-  Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
+  Newspaper, Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -40,6 +40,8 @@ export const NAV: Item[] = [
   { to: "/panel/org/counties", label: "شهرستان‌ها", icon: Map, roles: G },
   { to: "/panel/org/chambers", label: "اتاق‌های اصناف", icon: Landmark, roles: G },
   { to: "/panel/org/unions", label: "اتحادیه‌ها", icon: Building2, roles: GC },
+  { to: "/panel/news", label: "اخبار", icon: Newspaper, roles: ["samt"] },
+  { to: "/panel/supplier-list", label: "تامین‌کنندگان", icon: Truck, roles: ["samt", "governorate"] },
   { to: "/panel/org/users", label: "کاربران سازمانی", icon: Users, roles: GC },
   { to: "/panel/org/commodities", label: "کالاهای اساسی و سبد", icon: ClipboardList, roles: [] },
   { to: "/panel/org/categories", label: "دسته‌بندی‌ها", icon: Settings2, roles: [] },

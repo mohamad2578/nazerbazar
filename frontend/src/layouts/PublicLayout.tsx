@@ -49,6 +49,9 @@ export default function PublicLayout() {
             <NavLink to="/register-store" className={({ isActive }) => cx("rounded-lg px-3 py-2 text-sm", isActive ? "bg-brand-soft text-brand" : "text-muted hover:text-ink")}>
               ثبت‌نام فروشگاه
             </NavLink>
+            <NavLink to="/news" className={({ isActive }) => cx("rounded-lg px-3 py-2 text-sm", isActive ? "bg-brand-soft text-brand" : "text-muted hover:text-ink")}>
+              اخبار
+            </NavLink>
           </nav>
           <div className="mr-auto flex items-center gap-2">
             <CountyPicker compact />

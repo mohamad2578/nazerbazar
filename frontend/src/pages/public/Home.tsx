@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, BarChart3, PackageCheck, Search, ShieldAlert, Store as StoreIcon, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ClipboardList, PackageCheck, Search, Store as StoreIcon, Truck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Carousel from "../../components/Carousel";
@@ -77,8 +77,8 @@ export default function Home() {
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <QuickLink to="/subsidized" icon={<PackageCheck className="size-5" />} title="کالای تنظیم بازار" sub="سهمیه‌ای و یارانه‌ای" />
           <QuickLink to="/register-store" icon={<StoreIcon className="size-5" />} title="ثبت‌نام فروشگاه" sub="ویژه صاحبان صنف" />
-          <QuickLink to="/observatory" icon={<BarChart3 className="size-5" />} title="رصد بازار" sub="قیمت و سبد خانوار" />
-          <QuickLink to="/report" icon={<ShieldAlert className="size-5" />} title="گزارش تخلف" sub="گران‌فروشی، کم‌فروشی" danger />
+          <QuickLink to="/rates" icon={<ClipboardList className="size-5" />} title="نرخ‌نامه اتحادیه‌ها" sub="نرخ مصوب هر کالا" />
+          <QuickLink to="/suppliers" icon={<Truck className="size-5" />} title="ثبت‌نام تامین‌کنندگان" sub="فرم تامین کالا" />
         </section>
       )}
 

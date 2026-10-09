@@ -13,7 +13,7 @@ from django.db import transaction
 
 from apps.accounts.models import Role, User
 from apps.market.models import DailySnapshot, OfferLog, OfficialPrice, Product, StoreOffer
-from apps.market.services import set_official_price, upsert_offer
+from apps.market.services import assign_categories, set_official_price, upsert_offer
 from apps.observatory.models import Alert
 from apps.orgs.models import Store, Union
 
@@ -92,6 +92,8 @@ class Command(BaseCommand):
                 upsert_offer(store, p, price, True)
                 offers += 1
 
+        categorized = assign_categories()
         self.stdout.write(self.style.SUCCESS(
-            f"{removed} کالای قبلی حذف و {len(created)} کالای جدید با {offers} قیمت اعلامی ثبت شد."
+            f"{removed} کالای قبلی حذف و {len(created)} کالای جدید با {offers} قیمت اعلامی ثبت شد "
+            f"({categorized} کالا دسته‌بندی شد)."
         ))

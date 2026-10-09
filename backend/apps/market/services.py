@@ -234,3 +234,32 @@ def take_daily_snapshot(date=None) -> int:
             )
             n += 1
     return n
+
+
+# نگاشت نام کالا (کلیدواژه) به دسته‌بندی؛ اولین تطابق برنده است
+CATEGORY_KEYWORDS = [
+    ("برنج", "خواربار"),
+    ("سیب", "میوه و تره‌بار"),
+    ("تخم مرغ", "مرغ و ماهی"),
+    ("مرغ", "مرغ و ماهی"),
+    ("گوشت", "گوشت و پروتئین"),
+    ("ران", "گوشت و پروتئین"),
+    ("گوسفند", "گوشت و پروتئین"),
+    ("گاو", "گوشت و پروتئین"),
+]
+
+
+def assign_categories() -> int:
+    """دسته‌بندی کالاهایی که دسته ندارند را بر اساس نامشان تعیین می‌کند؛ برمی‌گرداند تعداد تغییر."""
+    from .models import Category
+
+    cats = {c.name: c for c in Category.objects.all()}
+    changed = 0
+    for p in Product.objects.filter(category__isnull=True):
+        for keyword, cat_name in CATEGORY_KEYWORDS:
+            if keyword in p.name and cat_name in cats:
+                p.category = cats[cat_name]
+                p.save(update_fields=["category"])
+                changed += 1
+                break
+    return changed

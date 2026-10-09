@@ -53,10 +53,9 @@ export default function Home() {
     <div className="space-y-6">
       {!searching && <HeroSlider />}
 
-      <section className="rounded-3xl bg-brand px-5 py-6 text-brand-ink sm:px-8 sm:py-9">
-        <h1 className="text-xl font-bold sm:text-3xl">بررسی و جستجوی قیمت کالاها</h1>
-        <p className="mt-1.5 text-sm opacity-90 sm:text-base">نرخ مصوب اتحادیه‌ها را ببینید و ارزان‌ترین فروشگاه مجاز نزدیک خود را پیدا کنید.</p>
-        <div className="relative mt-5">
+      <section className="rounded-3xl bg-brand px-4 py-4 text-brand-ink sm:px-6 sm:py-5">
+        <h1 className="sr-only">بررسی و جستجوی قیمت کالاها</h1>
+        <div className="relative">
           <Search className="pointer-events-none absolute right-4 top-1/2 size-5 -translate-y-1/2 text-muted" />
           <input
             value={q}
@@ -72,13 +71,6 @@ export default function Home() {
             </button>
           )}
         </div>
-        {stats.data && (
-          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm opacity-95">
-            <span><b className="tabular">{num(stats.data.products)}</b> کالای نرخ‌گذاری‌شده</span>
-            <span><b className="tabular">{num(stats.data.stores)}</b> فروشگاه مجاز</span>
-            <span><b className="tabular">{num(stats.data.unions)}</b> اتحادیه</span>
-          </div>
-        )}
       </section>
 
       {!searching && (

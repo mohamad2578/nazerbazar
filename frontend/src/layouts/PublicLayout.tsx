@@ -1,4 +1,4 @@
-import { BarChart3, Home, LayoutDashboard, Map, Search, ShieldAlert, User } from "lucide-react";
+import { Home, LayoutDashboard, Map, Search, ShieldAlert, User } from "lucide-react";
 import { NavLink, Link, Outlet } from "react-router-dom";
 import CountyPicker from "../components/CountyPicker";
 import InstallPrompt from "../components/InstallPrompt";
@@ -17,10 +17,10 @@ export function Logo({ small }: { small?: boolean }) {
   );
 }
 
+// ترتیب نوار پایین: نقشه، خانه (وسط)، پیگیری، حساب
 const NAV = [
-  { to: "/", label: "خانه", icon: Home, end: true },
   { to: "/map", label: "نقشه", icon: Map },
-  { to: "/observatory", label: "رصد بازار", icon: BarChart3 },
+  { to: "/", label: "خانه", icon: Home, end: true },
   { to: "/track", label: "پیگیری", icon: Search },
 ];
 
@@ -76,7 +76,7 @@ export default function PublicLayout() {
       </footer>
       <InstallPrompt />
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-[600] border-t border-line bg-surface/95 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5 pt-1.5">
+        <div className="mx-auto grid max-w-md grid-cols-4 pt-1.5">
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => cx("flex flex-col items-center gap-0.5 py-1 text-[11px]", isActive ? "text-brand" : "text-muted")}>
               <n.icon className="size-5" />

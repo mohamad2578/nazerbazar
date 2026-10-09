@@ -64,11 +64,13 @@ export default function ProductDetail() {
             </p>
           </div>
         </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_1.2fr]">
+        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1.2fr]">
           <div>
-            <div className="text-xs text-muted">نرخ مصوب اتحادیه</div>
-            <div className="mt-1 text-3xl font-bold tabular">{toman(p.official_price)}</div>
-            <div className="mt-2 text-xs text-muted">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="text-xs text-muted">نرخ مصوب اتحادیه</span>
+              <span className="text-xl font-bold tabular">{toman(p.official_price)}</span>
+            </div>
+            <div className="mt-1 text-xs text-muted">
               فروش مجاز: از <b className="tabular text-ink">{toman(p.min_allowed_price)}</b> تا <b className="tabular text-ink">{toman(p.official_price)}</b>
               {p.price_changed_at && <> · به‌روزرسانی {ago(p.price_changed_at)}</>}
             </div>
@@ -80,7 +82,7 @@ export default function ProductDetail() {
             </div>
           )}
         </div>
-        <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
           <Mini label="فروشگاه" value={num(p.offers_count)} />
           <Mini label="کمترین قیمت" value={p.min_price ? toman(p.min_price, false) : "—"} />
           <Mini label="میانگین" value={p.avg_price ? toman(p.avg_price, false) : "—"} />
@@ -143,9 +145,9 @@ export default function ProductDetail() {
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-surface-2 px-2 py-2.5">
-      <div className="text-[11px] text-muted">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold tabular">{value}</div>
+    <div className="rounded-lg bg-surface-2 px-2 py-1.5">
+      <div className="text-[10px] text-muted">{label}</div>
+      <div className="text-xs font-semibold tabular">{value}</div>
     </div>
   );
 }

@@ -47,6 +47,7 @@ api = [
     path("auth/otp/request/", accounts.otp_request),
     path("auth/otp/verify/", accounts.otp_verify),
     path("auth/login/", accounts.password_login),
+    path("auth/register/", accounts.citizen_register),
     path("auth/me/", accounts.me),
     path("auth/token/refresh/", TokenRefreshView.as_view()),
     path("my-store/", orgs.my_store),

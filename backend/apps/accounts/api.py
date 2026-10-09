@@ -85,6 +85,36 @@ def password_login(request):
     return Response(token_payload(user))
 
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([OTPThrottle])
+def citizen_register(request):
+    """ثبت‌نام شهروند با موبایل و رمز عبور؛ پس از آن با همین مشخصات وارد حساب می‌شود."""
+    from apps.core.utils import normalize_mobile
+
+    mobile = normalize_mobile(request.data.get("mobile", ""))
+    password = (request.data.get("password") or "").strip()
+    first = (request.data.get("first_name") or "").strip()
+    last = (request.data.get("last_name") or "").strip()
+    errors = {}
+    if not mobile:
+        errors["mobile"] = "شماره موبایل معتبر وارد کنید."
+    if not first:
+        errors["first_name"] = "نام را وارد کنید."
+    if not last:
+        errors["last_name"] = "نام خانوادگی را وارد کنید."
+    if len(password) < 8:
+        errors["password"] = "رمز عبور باید حداقل ۸ کاراکتر باشد."
+    if errors:
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(mobile=mobile).exists():
+        # نمی‌گذاریم کسی با ثبت‌نام، حساب موجود (مثلا سازمانی یا فروشگاه) را بازنویسی کند
+        return Response({"mobile": "این شماره قبلا ثبت شده است؛ با کد پیامکی یا رمز عبور وارد شوید."},
+                        status=status.HTTP_400_BAD_REQUEST)
+    user = User.objects.create_user(mobile, password=password, first_name=first, last_name=last, role=Role.CITIZEN)
+    return Response(token_payload(user), status=status.HTTP_201_CREATED)
+
+
 @api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def me(request):

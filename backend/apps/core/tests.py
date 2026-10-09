@@ -881,3 +881,33 @@ class ChainStoreTests(Base):
         names = {r["name"] for r in rows}
         self.assertIn(self.product.name, names)
         self.assertIn("شکر", names)
+
+
+class CitizenRegisterTests(Base):
+    """ثبت‌نام شهروند با موبایل و رمز؛ حساب موجود را بازنویسی نمی‌کند."""
+
+    def setUp(self):
+        cache.clear()  # محدودیت نرخ ثبت‌نام بین تست‌ها ریست شود
+
+    def _reg(self, **over):
+        body = {"mobile": "09351230000", "password": "citizen-pass-1", "first_name": "علی", "last_name": "احمدی"}
+        body.update(over)
+        return APIClient().post("/api/auth/register/", body, format="json")
+
+    def test_citizen_registers_and_can_log_in_with_password(self):
+        r = self._reg()
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["user"]["role"], Role.CITIZEN)
+        self.assertEqual(APIClient().post("/api/auth/login/",
+                         {"mobile": "09351230000", "password": "citizen-pass-1"}).status_code, 200)
+
+    def test_registration_cannot_take_over_an_existing_account(self):
+        self.assertEqual(self._reg(mobile="09120000001").status_code, 400)  # کاربر استانداری
+        self._reg()
+        self.assertEqual(self._reg(password="another-pass-2").status_code, 400)
+
+    def test_short_password_and_missing_name_are_rejected(self):
+        r = self._reg(password="123", first_name="")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("password", r.data)
+        self.assertIn("first_name", r.data)

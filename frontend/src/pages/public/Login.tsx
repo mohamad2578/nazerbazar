@@ -1,8 +1,8 @@
-import { KeyRound, Smartphone } from "lucide-react";
+import { KeyRound, Smartphone, UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Card, Field, Input, Segmented } from "../../components/ui";
-import { api, ApiError } from "../../lib/api";
+import { api, ApiError, fieldErrors } from "../../lib/api";
 import { isPanelUser, useAuth, type Me } from "../../lib/auth";
 import { num, toEn } from "../../lib/format";
 
@@ -13,7 +13,10 @@ export default function Login() {
   const [params] = useSearchParams();
   const nav = useNavigate();
   const next = params.get("next");
-  const [mode, setMode] = useState<"otp" | "password">("otp");
+  const [mode, setMode] = useState<"otp" | "password" | "register">("otp");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [regErrors, setRegErrors] = useState<Record<string, string>>({});
   const [mobile, setMobile] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -75,6 +78,7 @@ export default function Login() {
             options={[
               { value: "otp", label: <span className="inline-flex items-center gap-1"><Smartphone className="size-4" /> کد پیامکی</span> },
               { value: "password", label: <span className="inline-flex items-center gap-1"><KeyRound className="size-4" /> رمز عبور</span> },
+              { value: "register", label: <span className="inline-flex items-center gap-1"><UserPlus className="size-4" /> ثبت‌نام</span> },
             ]}
           />
         </div>
@@ -82,7 +86,18 @@ export default function Login() {
           className="mt-5 space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (mode === "password") run(async () => done(await api.post<TokenResp>("/auth/login/", { mobile: toEn(mobile), password })));
+            if (mode === "register") {
+              setRegErrors({});
+              run(async () => {
+                try {
+                  done(await api.post<TokenResp>("/auth/register/", { mobile: toEn(mobile), password, first_name: firstName, last_name: lastName }));
+                } catch (err) {
+                  if (err instanceof ApiError) setRegErrors(fieldErrors(err));
+                  throw err;
+                }
+              });
+            }
+            else if (mode === "password") run(async () => done(await api.post<TokenResp>("/auth/login/", { mobile: toEn(mobile), password })));
             else if (step === "mobile") send();
             else verify();
           }}
@@ -130,6 +145,21 @@ export default function Login() {
               />
             </Field>
           )}
+          {mode === "register" && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="نام" error={regErrors.first_name}>
+                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" required />
+                </Field>
+                <Field label="نام خانوادگی" error={regErrors.last_name}>
+                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" required />
+                </Field>
+              </div>
+              <Field label="رمز عبور" error={regErrors.password} hint="حداقل ۸ کاراکتر؛ با همین شماره و رمز وارد می‌شوید.">
+                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" dir="ltr" required />
+              </Field>
+            </>
+          )}
           {mode === "password" && (
             <Field label="رمز عبور">
               <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" dir="ltr" required />
@@ -137,7 +167,7 @@ export default function Login() {
           )}
           {error && <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
           <Button type="submit" loading={busy} className="w-full" size="lg">
-            {mode === "password" ? "ورود" : step === "mobile" ? "دریافت کد تایید" : "تایید و ورود"}
+            {mode === "register" ? "ثبت‌نام و ورود" : mode === "password" ? "ورود" : step === "mobile" ? "دریافت کد تایید" : "تایید و ورود"}
           </Button>
           {mode === "otp" && step === "code" && (
             <button type="button" onClick={() => { setStep("mobile"); setCode(""); }} className="w-full text-sm text-muted">

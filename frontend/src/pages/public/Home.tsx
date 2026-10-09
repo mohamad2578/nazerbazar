@@ -53,7 +53,7 @@ export default function Home() {
     <div className="space-y-6">
       {!searching && <HeroSlider />}
 
-      <section className="rounded-3xl bg-brand px-4 py-4 text-brand-ink sm:px-6 sm:py-5">
+      <section className="rounded-3xl bg-surface-2 px-3 py-3 sm:px-4 sm:py-4">
         <h1 className="sr-only">بررسی و جستجوی قیمت کالاها</h1>
         <div className="relative">
           <Search className="pointer-events-none absolute right-4 top-1/2 size-5 -translate-y-1/2 text-muted" />
@@ -61,7 +61,7 @@ export default function Home() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="جستجوی کالا: برنج، مرغ، روغن…"
-            className="h-13 w-full rounded-2xl bg-surface pr-12 pl-10 text-[15px] text-ink shadow-lg placeholder:text-muted focus:outline-none"
+            className="h-13 w-full rounded-2xl border border-line bg-surface pr-12 pl-10 text-[15px] text-ink shadow-card placeholder:text-muted focus:border-brand focus:outline-none"
             type="search"
             enterKeyHint="search"
           />

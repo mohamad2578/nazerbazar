@@ -46,7 +46,7 @@ export default function ProductCard({ p }: { p: PublicProduct }) {
           )}
           <div className="flex items-baseline justify-between gap-2 border-t border-line pt-1 text-xs text-muted">
             <span>نرخ مصوب</span>
-            <b className="tabular text-sm font-semibold text-ink">{toman(p.official_price)}</b>
+            <b className="tabular text-sm font-medium text-muted">{toman(p.official_price)}</b>
           </div>
         </div>
       </div>

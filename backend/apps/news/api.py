@@ -11,17 +11,12 @@ from .models import NewsItem
 
 class NewsSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source="created_by.full_name", read_only=True, default="")
-    image = serializers.SerializerMethodField()
+    # فیلد قابل‌نوشتن: آپلود عکس از پنل ذخیره می‌شود و آدرس مطلق (با schema درست) برمی‌گردد
+    image = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = NewsItem
         fields = ["id", "title", "body", "image", "is_published", "published_at", "created_by_name"]
-
-    def get_image(self, obj):
-        if not obj.image:
-            return None
-        request = self.context.get("request")
-        return request.build_absolute_uri(obj.image.url) if request else obj.image.url
 
 
 class NewsAdminViewSet(viewsets.ModelViewSet):

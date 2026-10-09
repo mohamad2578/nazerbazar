@@ -964,3 +964,18 @@ class NewsAndSupplierTests(Base):
         Product.objects.create(union=self.union, name="سیب زمینی", unit="kg")
         self.assertEqual(assign_categories(), 2)
         self.assertEqual(Product.objects.get(name="برنج هندی").category.name, "خواربار")
+
+
+    def test_news_image_upload_is_saved_and_returned_as_url(self):
+        from PIL import Image
+
+        buf = BytesIO()
+        Image.new("RGB", (40, 40), (200, 30, 30)).save(buf, "JPEG")
+        upload = SimpleUploadedFile("n.jpg", buf.getvalue(), content_type="image/jpeg")
+        c = self.client_for(self.samt)
+        r = c.post("/api/news/", {"title": "خبر دارای عکس", "body": "متن", "is_published": "true", "image": upload},
+                   format="multipart")
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertTrue(r.data["image"] and "/media/news/" in r.data["image"], r.data["image"])
+        public = self.client.get(f"/api/public/news/{r.data['id']}/").data
+        self.assertIn("/media/news/", public["image"])

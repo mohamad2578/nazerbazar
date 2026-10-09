@@ -2,6 +2,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, BarChart3, PackageCheck, Search, ShieldAlert, Store as StoreIcon, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import Carousel from "../../components/Carousel";
 import HeroSlider from "../../components/HeroSlider";
 import ProductCard, { type PublicProduct } from "../../components/ProductCard";
 import { Button, cx, Empty, ErrorBox, Loading } from "../../components/ui";
@@ -91,13 +92,12 @@ export default function Home() {
 
       {!searching && !!stats.data?.latest_changes.length && (
         <section>
-          <h2 className="mb-3 font-semibold">آخرین تغییرات نرخ مصوب</h2>
-          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
+          <Carousel title="آخرین تغییرات نرخ مصوب">
             {stats.data.latest_changes.map((p) => {
               const up = p.previous_price ? p.official_price > p.previous_price : null;
               const change = p.previous_price ? ((p.official_price - p.previous_price) / p.previous_price) * 100 : null;
               return (
-                <Link key={p.id} to={`/p/${p.id}`} className="w-44 shrink-0 rounded-2xl border border-line bg-surface p-3 shadow-card">
+                <Link key={p.id} to={`/p/${p.id}`} className="rounded-2xl border border-line bg-surface p-3 shadow-card">
                   <div className="truncate text-sm font-medium">{p.name}</div>
                   <div className="mt-0.5 truncate text-[11px] text-muted">{p.union_name}</div>
                   <div className="mt-2 tabular font-semibold">{toman(p.official_price)}</div>
@@ -110,7 +110,7 @@ export default function Home() {
                 </Link>
               );
             })}
-          </div>
+          </Carousel>
         </section>
       )}
 

@@ -85,12 +85,12 @@ export default function MyShop() {
           </Empty>
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3">
           {rows.map((p) => (
             <Card key={p.id} className={cx("overflow-hidden", !p.is_active && "opacity-60")}>
-              <div className="relative aspect-[4/3] bg-surface-2">
+              <div className="relative aspect-square bg-surface-2">
                 {p.image
-                  ? <img src={p.image} alt="" className="size-full object-cover" />
+                  ? <img src={p.image} alt="" className="size-full object-contain p-2" />
                   : <span className="grid size-full place-items-center text-muted"><Package className="size-8" /></span>}
                 <div className="absolute right-2 top-2 flex gap-1">
                   {!p.is_active && <Badge tone="neutral">پنهان</Badge>}

@@ -145,12 +145,13 @@ function ShopSection({ storeId, storeName }: { storeId: number; storeName: strin
           {cats.map((c) => <Chip key={c} active={cat === c} onClick={() => setCat(c)}>{c}</Chip>)}
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      {/* عرض ثابت کارت‌ها تا تصویر بزرگِ یک محصول، کل بخش را بزرگ نکند */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3">
         {shown.map((p) => (
           <Card key={p.id} className={cx("overflow-hidden", !p.is_available && "opacity-70")}>
-            <div className="relative aspect-[4/3] bg-surface-2">
+            <div className="relative aspect-square bg-surface-2">
               {p.image
-                ? <img src={p.image} alt="" loading="lazy" className="size-full object-cover" />
+                ? <img src={p.image} alt="" loading="lazy" className="size-full object-contain p-2" />
                 : <span className="grid size-full place-items-center text-muted"><Package className="size-7" /></span>}
               {p.discount_percent ? <Badge tone="ok" className="absolute right-2 top-2">{num(p.discount_percent)}٪ تخفیف</Badge> : null}
               {!p.is_available && <Badge tone="warn" className="absolute left-2 top-2">ناموجود</Badge>}

@@ -979,3 +979,20 @@ class NewsAndSupplierTests(Base):
         self.assertTrue(r.data["image"] and "/media/news/" in r.data["image"], r.data["image"])
         public = self.client.get(f"/api/public/news/{r.data['id']}/").data
         self.assertIn("/media/news/", public["image"])
+
+    def test_news_image_can_be_added_when_editing_an_existing_item(self):
+        from PIL import Image
+
+        c = self.client_for(self.samt)
+        created = c.post("/api/news/", {"title": "بدون عکس", "body": "متن"}, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertIsNone(created.data["image"])
+
+        buf = BytesIO()
+        Image.new("RGB", (60, 60), (10, 120, 200)).save(buf, "JPEG")
+        upload = SimpleUploadedFile("edit.jpg", buf.getvalue(), content_type="image/jpeg")
+        # همان‌طور که فرم پنل می‌فرستد: PATCH چندبخشی با همه فیلدها
+        r = c.patch(f"/api/news/{created.data['id']}/",
+                    {"title": "بدون عکس", "body": "متن", "is_published": "true", "image": upload}, format="multipart")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertIn("/media/news/", r.data["image"] or "")

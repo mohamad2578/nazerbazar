@@ -35,17 +35,19 @@ export default function ProductCard({ p }: { p: PublicProduct }) {
         <div className="mt-0.5 truncate text-xs text-muted">
           {p.union_name} · هر {p.unit_display}
         </div>
-        <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-xs text-muted">
-            نرخ مصوب <b className="tabular text-sm font-semibold text-ink">{toman(p.official_price)}</b>
-          </span>
+        <div className="mt-2 space-y-1">
           {p.min_price ? (
-            <span className="inline-flex items-center gap-1 text-xs text-ok">
-              <Store className="size-3.5" /> از <b className="tabular">{toman(p.min_price)}</b> در {num(p.offers_count)} فروشگاه
-            </span>
+            <div className="inline-flex items-center gap-1 text-xs text-ok">
+              <Store className="size-3.5 shrink-0" />
+              <span>از <b className="tabular">{toman(p.min_price)}</b> در {num(p.offers_count)} فروشگاه</span>
+            </div>
           ) : (
-            <span className="text-xs text-muted">هنوز فروشگاهی قیمت نداده</span>
+            <div className="text-xs text-muted">هنوز فروشگاهی قیمت نداده</div>
           )}
+          <div className="flex items-baseline justify-between gap-2 border-t border-line pt-1 text-xs text-muted">
+            <span>نرخ مصوب</span>
+            <b className="tabular text-sm font-semibold text-ink">{toman(p.official_price)}</b>
+          </div>
         </div>
       </div>
       <ChevronLeft className="size-5 shrink-0 text-muted" />

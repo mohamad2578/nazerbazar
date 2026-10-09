@@ -1,4 +1,4 @@
-import { Home, LayoutDashboard, Map, Search, ShieldAlert, User } from "lucide-react";
+import { Home, Newspaper, LayoutDashboard, Map, Search, ShieldAlert, User } from "lucide-react";
 import { NavLink, Link, Outlet } from "react-router-dom";
 import CountyPicker from "../components/CountyPicker";
 import InstallPrompt from "../components/InstallPrompt";
@@ -18,7 +18,9 @@ export function Logo({ small }: { small?: boolean }) {
 }
 
 // ترتیب نوار پایین: نقشه، خانه (وسط)، پیگیری، حساب
+// ترتیب از راست به چپ: اخبار، نقشه، خانه، پیگیری، حساب
 const NAV = [
+  { to: "/news", label: "اخبار", icon: Newspaper },
   { to: "/map", label: "نقشه", icon: Map },
   { to: "/", label: "خانه", icon: Home, end: true },
   { to: "/track", label: "پیگیری", icon: Search },
@@ -49,9 +51,6 @@ export default function PublicLayout() {
             <NavLink to="/register-store" className={({ isActive }) => cx("rounded-lg px-3 py-2 text-sm", isActive ? "bg-brand-soft text-brand" : "text-muted hover:text-ink")}>
               ثبت‌نام فروشگاه
             </NavLink>
-            <NavLink to="/news" className={({ isActive }) => cx("rounded-lg px-3 py-2 text-sm", isActive ? "bg-brand-soft text-brand" : "text-muted hover:text-ink")}>
-              اخبار
-            </NavLink>
           </nav>
           <div className="mr-auto flex items-center gap-2">
             <CountyPicker compact />
@@ -79,7 +78,7 @@ export default function PublicLayout() {
       </footer>
       <InstallPrompt />
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-[600] border-t border-line bg-surface/95 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-4 pt-1.5">
+        <div className="mx-auto grid max-w-md grid-cols-5 pt-1.5">
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => cx("flex flex-col items-center gap-0.5 py-1 text-[11px]", isActive ? "text-brand" : "text-muted")}>
               <n.icon className="size-5" />

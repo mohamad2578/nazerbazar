@@ -87,13 +87,14 @@ export default function Stores() {
           <Button size="sm" variant="secondary" disabled={!q.data.next} onClick={() => setPage(page + 1)}>بعدی</Button>
         </div>
       )}
-      {sel && <StoreSheet store={sel} canManage={canManage} onClose={() => setSel(null)} />}
+      {sel && <StoreSheet store={sel} canManage={canManage} canActAs={canActAs} onClose={() => setSel(null)} />}
       {creating && <StoreForm onClose={() => setCreating(false)} />}
     </div>
   );
 }
 
-function StoreSheet({ store, canManage, onClose }: { store: StoreT; canManage: boolean; onClose: () => void }) {
+function StoreSheet({ store, canManage, canActAs, onClose }: { store: StoreT; canManage: boolean; canActAs: boolean; onClose: () => void }) {
+  const nav = useNavigate();
   const [reason, setReason] = useState("");
   const [editing, setEditing] = useState(false);
   const [pwd, setPwd] = useState("");
@@ -141,6 +142,11 @@ function StoreSheet({ store, canManage, onClose }: { store: StoreT; canManage: b
         <Info label="نشانی" value={store.address} wide />
         {store.status_reason && <Info label="دلیل" value={store.status_reason} wide />}
       </dl>
+      {canActAs && store.status === "active" && (
+        <Button className="mt-4 w-full" icon={<Tags className="size-4" />} onClick={() => nav(`/panel/prices?store=${store.id}`)}>
+          قیمت‌دهی به جای این فروشگاه
+        </Button>
+      )}
       {store.license_image && <a href={store.license_image} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-brand underline">مشاهده تصویر پروانه</a>}
 
       {canManage && (

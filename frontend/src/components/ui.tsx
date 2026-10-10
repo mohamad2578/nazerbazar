@@ -283,12 +283,17 @@ export function DataTable<T extends { id?: number | string }>({ rows, columns, o
           <div key={keyOf(r, i)} onClick={() => onRowClick?.(r)} className={cx("px-4 py-3", onRowClick && "active:bg-surface-2")}>
             <div className="mb-1.5 font-medium">{val(r, columns[0])}</div>
             <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-              {columns.slice(1).filter((c) => !c.hideOnMobile).map((c) => (
-                <div key={c.key} className="flex min-w-0 items-center gap-1">
-                  <dt className="shrink-0 text-muted">{c.label}:</dt>
-                  <dd className="min-w-0 truncate">{val(r, c)}</dd>
-                </div>
-              ))}
+              {columns.slice(1).filter((c) => !c.hideOnMobile).map((c) =>
+                c.label ? (
+                  <div key={c.key} className="flex min-w-0 items-center gap-1">
+                    <dt className="shrink-0 text-muted">{c.label}:</dt>
+                    <dd className="min-w-0 truncate">{val(r, c)}</dd>
+                  </div>
+                ) : (
+                  // ستون بدون عنوان معمولا دکمه است؛ تمام‌عرض تا روی گوشی بریده نشود
+                  <div key={c.key} className="col-span-2 mt-1">{val(r, c)}</div>
+                ),
+              )}
             </dl>
           </div>
         ))}

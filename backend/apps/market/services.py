@@ -171,7 +171,7 @@ def _apply_price(record: OfficialPrice, product: Product, discount: int) -> None
 
 
 @transaction.atomic
-def upsert_offer(store: Store, product: Product, price: int, is_available=True) -> StoreOffer:
+def upsert_offer(store: Store, product: Product, price: int, is_available=True, by=None) -> StoreOffer:
     if store.status != Store.Status.ACTIVE:
         raise ValidationError({"store": "فروشگاه شما هنوز فعال نشده است."})
     if product.union_id not in store.priceable_union_ids():
@@ -187,7 +187,7 @@ def upsert_offer(store: Store, product: Product, price: int, is_available=True) 
     if not created:
         offer.price, offer.is_available, offer.confirmed_at = price, is_available, now
         offer.save()
-    OfferLog.objects.create(offer=offer, price=price, official_price=product.current_price)
+    OfferLog.objects.create(offer=offer, price=price, official_price=product.current_price, set_by=by)
     return offer
 
 

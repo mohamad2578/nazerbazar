@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
@@ -157,7 +157,27 @@ class ProductViewSet(ScopedModelViewSet):
 # ───────────────────────── پنل فروشگاه ─────────────────────────
 
 
-def _my_store(user) -> Store:
+# نقش‌هایی که می‌توانند بدون ورود با حساب فروشگاه، به جای آن قیمت ثبت کنند
+ACT_AS_STORE_ROLES = ("admin", "samt")
+
+
+def _my_store(request) -> Store:
+    """فروشگاهی که قیمت‌ها برایش خوانده/ثبت می‌شود.
+
+    فروشگاه خودِ کاربر؛ یا برای مدیر کل و اداره صمت، فروشگاهی که با ?store=<id> انتخاب شده،
+    به شرط اینکه در حوزه دسترسی آن‌ها باشد (صمت فقط استان خودش).
+    """
+    from apps.core.scoping import scoped
+
+    user = request.user
+    target = request.query_params.get("store")
+    if target:
+        if user.role not in ACT_AS_STORE_ROLES:
+            raise PermissionDenied("قیمت‌دهی به جای فروشگاه فقط برای مدیر کل و اداره صمت مجاز است.")
+        store = scoped(Store.objects.select_related("union"), user, Store.SCOPE).filter(pk=target).distinct().first()
+        if not store:
+            raise NotFound("فروشگاه یافت نشد یا خارج از حوزه دسترسی شماست.")
+        return store
     store = user.stores.select_related("union").first()
     if not store:
         raise ValidationError({"detail": "ابتدا فروشگاه خود را ثبت کنید."})
@@ -168,7 +188,7 @@ def _my_store(user) -> Store:
 @permission_classes([IsAuthenticated])
 def store_catalog(request):
     """کالاهای اتحادیه به همراه قیمت فعلی این فروشگاه"""
-    store = _my_store(request.user)
+    store = _my_store(request)
     offers = {o.product_id: o for o in store.offers.all()}
     now = timezone.now()
     grace = services.grace_period()
@@ -191,14 +211,19 @@ def store_catalog(request):
             "deadline": (p.price_changed_at + grace) if stale else None,
             "hidden": bool(stale and p.price_changed_at + grace < now),
         })
-    return Response({"store": {"id": store.pk, "name": store.name, "status": store.status}, "items": rows})
+    return Response({
+        "store": {"id": store.pk, "name": store.name, "status": store.status,
+                  "acting_as": store.owner_id != request.user.pk},
+        "items": rows,
+    })
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def store_save_offers(request):
     """ثبت گروهی قیمت‌ها: [{product, price, is_available}]؛ خطاها به تفکیک کالا برمی‌گردد."""
-    store = _my_store(request.user)
+    store = _my_store(request)
+    acting = store.owner_id != request.user.pk
     items = request.data if isinstance(request.data, list) else request.data.get("items", [])
     saved, errors = [], {}
     for item in items:
@@ -209,7 +234,8 @@ def store_save_offers(request):
             continue
         try:
             with transaction.atomic():
-                services.upsert_offer(store, product, item.get("price"), bool(item.get("is_available", True)))
+                services.upsert_offer(store, product, item.get("price"), bool(item.get("is_available", True)),
+                                      by=request.user if acting else None)
             saved.append(pid)
         except Exception as e:  # noqa: BLE001 - پیام خطای اعتبارسنجی به کاربر نمایش داده می‌شود
             msg = getattr(e, "message_dict", None) or {"price": [str(e)]}
@@ -220,7 +246,7 @@ def store_save_offers(request):
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def store_remove_offer(request, product_id):
-    store = _my_store(request.user)
+    store = _my_store(request)
     store.offers.filter(product_id=product_id).delete()
     return Response(status=204)
 

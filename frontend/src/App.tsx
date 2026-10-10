@@ -93,7 +93,7 @@ export default function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="stores" element={<RequireAuth roles={MANAGERS}><Stores /></RequireAuth>} />
           <Route path="products" element={<RequireAuth roles={MANAGERS}><Products /></RequireAuth>} />
-          <Route path="prices" element={<RequireAuth roles={["store"]}><Prices /></RequireAuth>} />
+          <Route path="prices" element={<RequireAuth roles={["store", "samt"]}><Prices /></RequireAuth>} />
           <Route path="price-approvals" element={<RequireAuth roles={REVIEWERS}><PriceApprovals /></RequireAuth>} />
           <Route path="price-upload" element={<RequireAuth roles={PRICE_LOADERS}><PriceUpload /></RequireAuth>} />
           <Route path="other-prices" element={<RequireAuth roles={OTHER_PRICES}><OtherPrices /></RequireAuth>} />

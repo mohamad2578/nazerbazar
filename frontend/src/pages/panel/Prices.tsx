@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Save, Search } from "lucide-react";
+import { AlertTriangle, ArrowRight, Save, Search, UserCog } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { Badge, Button, Card, cx, Empty, ErrorBox, Input, Loading, PageHeader, PriceInput, Segmented, useToast } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -14,7 +15,14 @@ type Item = {
 export default function Prices() {
   const qc = useQueryClient();
   const toast = useToast();
-  const q = useQuery({ queryKey: ["catalog"], queryFn: () => api.get<{ store: { status: string }; items: Item[] }>("/store/catalog/") });
+  // مدیر کل و اداره صمت با ?store=<id> به جای یک فروشگاه قیمت می‌دهند
+  const [params] = useSearchParams();
+  const actAs = params.get("store");
+  const suffix = actAs ? `?store=${actAs}` : "";
+  const q = useQuery({
+    queryKey: ["catalog", actAs],
+    queryFn: () => api.get<{ store: { status: string; name: string; acting_as?: boolean }; items: Item[] }>(`/store/catalog/${suffix}`),
+  });
   const [draft, setDraft] = useState<Record<number, { price: string; available: boolean }>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<"all" | "stale" | "unpriced" | "priced">("all");
@@ -28,7 +36,7 @@ export default function Prices() {
   const dirty = Object.keys(draft).length;
 
   const save = useMutation({
-    mutationFn: (rows: { product: number; price: number; is_available: boolean }[]) => api.post<{ saved: number[]; errors: Record<string, string> }>("/store/offers/", rows),
+    mutationFn: (rows: { product: number; price: number; is_available: boolean }[]) => api.post<{ saved: number[]; errors: Record<string, string> }>(`/store/offers/${suffix}`, rows),
     onSuccess: (r) => {
       setErrors(r.errors);
       setDraft((d) => Object.fromEntries(Object.entries(d).filter(([k]) => r.errors[k])));
@@ -52,13 +60,20 @@ export default function Prices() {
 
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
-  if (q.data!.store.status !== "active") return <Card><Empty title="فروشگاه شما هنوز فعال نشده است">پس از تایید اتحادیه امکان ثبت قیمت فراهم می‌شود.</Empty></Card>;
+  if (q.data!.store.status !== "active") return <Card><Empty title={actAs ? "این فروشگاه هنوز فعال نشده است" : "فروشگاه شما هنوز فعال نشده است"}>پس از تایید اتحادیه امکان ثبت قیمت فراهم می‌شود.</Empty></Card>;
   const staleCount = items.filter((i) => i.is_stale).length;
 
   return (
     <div className="space-y-4">
+      {q.data!.store.acting_as && (
+        <Card className="flex flex-wrap items-center gap-2 border-warn/40 bg-warn-soft p-3 text-sm text-warn">
+          <UserCog className="size-5 shrink-0" />
+          <span className="flex-1">در حال قیمت‌دهی <b>به جای فروشگاه «{q.data!.store.name}»</b>؛ هر قیمتی که ثبت کنید به نام شما در سابقه ثبت می‌شود.</span>
+          <Link to="/panel/stores" className="inline-flex items-center gap-1 font-medium underline"><ArrowRight className="size-4" />بازگشت به فروشگاه‌ها</Link>
+        </Card>
+      )}
       <PageHeader
-        title="قیمت‌های من"
+        title={q.data!.store.acting_as ? `قیمت‌های ${q.data!.store.name}` : "قیمت‌های من"}
         subtitle="قیمت هر کالا باید بین نرخ مصوب اتحادیه و حداکثر ۲۰٪ کمتر از آن باشد."
         actions={staleCount > 0 && <Button variant="soft" onClick={confirmAll} loading={save.isPending}>تایید قیمت‌های معتبر</Button>}
       />

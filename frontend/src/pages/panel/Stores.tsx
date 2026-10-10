@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, Download, KeyRound, Pencil, Phone, Plus, Search } from "lucide-react";
+import { BadgeCheck, Download, KeyRound, Pencil, Phone, Plus, Search, Tags } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Badge, Button, Card, DataTable, Empty, Field, Input, Loading, PageHeader, Segmented, Select, Sheet, STATUS_TONE, Textarea, useToast } from "../../components/ui";
 import { fieldErrors } from "../../lib/api";
 import { api, download, type Page } from "../../lib/api";
@@ -19,6 +19,8 @@ type StoreT = {
 
 /** نقش‌هایی که اجازه تعریف و مدیریت فروشگاه دارند. */
 const MANAGER_ROLES = ["union", "chamber", "samt", "governorate", "admin"];
+/** نقش‌هایی که می‌توانند به جای فروشگاه قیمت ثبت کنند. */
+const ACT_AS_ROLES = ["samt", "admin"];
 
 export default function Stores() {
   const { user } = useAuth();
@@ -30,6 +32,8 @@ export default function Stores() {
   const q = useQuery({ queryKey: ["stores", status, search, page], queryFn: () => api.get<Page<StoreT>>("/stores/", { status, search, page }) });
   const [creating, setCreating] = useState(false);
   const canManage = MANAGER_ROLES.includes(user!.role);
+  const canActAs = ACT_AS_ROLES.includes(user!.role);
+  const nav = useNavigate();
   return (
     <div className="space-y-4">
       <PageHeader
@@ -64,6 +68,15 @@ export default function Stores() {
               { key: "status", label: "وضعیت", render: (s) => <Badge tone={STATUS_TONE[s.status]}>{s.status_display}</Badge> },
               { key: "offers_count", label: "قیمت‌ها", render: (s) => num(s.offers_count) },
               { key: "created_at", label: "ثبت", render: (s) => date(s.created_at), hideOnMobile: true },
+              ...(canActAs ? [{
+                key: "act_as", label: "",
+                render: (s: StoreT) => s.status === "active" ? (
+                  <Button size="sm" variant="soft" icon={<Tags className="size-4" />}
+                    onClick={(e) => { e.stopPropagation(); nav(`/panel/prices?store=${s.id}`); }}>
+                    قیمت‌دهی
+                  </Button>
+                ) : null,
+              }] : []),
             ]}
           />
         )}

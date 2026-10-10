@@ -34,11 +34,11 @@ class MeSerializer(serializers.ModelSerializer):
         read_only_fields = ["mobile", "role", "province", "chamber", "union"]
 
     def get_store(self, u):
-        s = u.stores.select_related("union").first()
+        s = u.stores.select_related("union").prefetch_related("covered_unions").first()
         if not s:
             return None
         return {"id": s.pk, "name": s.name, "status": s.status, "status_display": s.get_status_display(),
-                "status_reason": s.status_reason, "union_name": s.union.name}
+                "status_reason": s.status_reason, "union_name": s.union_display}
 
     def get_scope_name(self, u):
         target = {"governorate": u.province, "samt": u.province, "chamber": u.chamber, "union": u.union}.get(u.role)

@@ -996,3 +996,55 @@ class NewsAndSupplierTests(Base):
                     {"title": "بدون عکس", "body": "متن", "is_published": "true", "image": upload}, format="multipart")
         self.assertEqual(r.status_code, 200, r.data)
         self.assertIn("/media/news/", r.data["image"] or "")
+
+
+class ChainStoreLoginAndActAsTests(Base):
+    """ورود فروشگاه فاقد اتحادیه و قیمت‌دهی مسئول به جای فروشگاه."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000017", role=Role.SAMT, province=cls.prov)
+        cls.samt_other = User.objects.create_user("09120000018", role=Role.SAMT, province=cls.prov2)
+
+    def setUp(self):
+        cache.clear()
+
+    def test_union_less_store_owner_can_log_in(self):
+        r = self.client_for(self.samt).post("/api/stores/", {
+            "name": "فروشگاه پرسپولیس", "address": "همدان", "owner_mobile": "09011176787",
+            "password": "chain-pass-1", "union": None, "covered_unions": [self.union.pk],
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        login = APIClient().post("/api/auth/login/", {"mobile": "09011176787", "password": "chain-pass-1"})
+        self.assertEqual(login.status_code, 200, login.content[:300])
+        self.assertIn("فاقد اتحادیه", login.data["user"]["store"]["union_name"])
+
+    def test_samt_prices_on_behalf_of_a_store_and_it_is_logged(self):
+        from apps.market.models import OfferLog
+
+        store = self.stores[0]
+        c = self.client_for(self.samt)
+        cat = c.get(f"/api/store/catalog/?store={store.pk}")
+        self.assertEqual(cat.status_code, 200, cat.data)
+        self.assertTrue(cat.data["store"]["acting_as"])
+        price = self.product.current_price
+        r = c.post(f"/api/store/offers/?store={store.pk}", [{"product": self.product.pk, "price": price}], format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        log = OfferLog.objects.filter(offer__store=store).latest("created_at")
+        self.assertEqual(log.set_by, self.samt)
+
+    def test_act_as_is_limited_by_role_and_province(self):
+        store = self.stores[0]
+        self.assertEqual(self.client_for(self.samt_other).get(f"/api/store/catalog/?store={store.pk}").status_code, 404)
+        self.assertEqual(self.client_for(self.uni).get(f"/api/store/catalog/?store={store.pk}").status_code, 403)
+        # فروشگاه دیگر نمی‌تواند به جای فروشگاه دیگری قیمت بدهد
+        self.assertEqual(self.client_for(self.stores[1].owner).get(f"/api/store/catalog/?store={store.pk}").status_code, 403)
+
+    def test_store_owner_pricing_is_unchanged(self):
+        from apps.market.models import OfferLog
+
+        owner = self.stores[0].owner
+        r = self.client_for(owner).post("/api/store/offers/", [{"product": self.product.pk, "price": self.product.current_price}], format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertIsNone(OfferLog.objects.filter(offer__store=self.stores[0]).latest("created_at").set_by)

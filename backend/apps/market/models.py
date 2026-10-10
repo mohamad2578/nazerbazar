@@ -163,6 +163,9 @@ class OfferLog(models.Model):
     price = models.PositiveBigIntegerField()
     official_price = models.PositiveBigIntegerField()
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    # اگر مسئول (صمت/مدیر کل) به جای فروشگاه قیمت داده باشد، اینجا ثبت می‌شود
+    set_by = models.ForeignKey("accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="+", verbose_name="ثبت‌کننده")
 
     class Meta:
         ordering = ["-created_at"]

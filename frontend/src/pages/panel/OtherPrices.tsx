@@ -12,7 +12,7 @@ type OtherProduct = {
   price: number; old_price: number | null; discount_percent: number | null;
   unit_display: string; is_active: boolean; is_available: boolean;
   status: string; status_display: string; reviewed_at: string | null; review_note: string;
-  created_at: string;
+  created_at: string; is_special: boolean;
 };
 
 const TONE: Record<string, "warn" | "ok" | "danger"> = { pending: "warn", approved: "ok", rejected: "danger" };
@@ -79,6 +79,7 @@ export default function OtherPrices() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{r.name}</span>
                       <Badge tone={TONE[r.status]}>{r.status_display}</Badge>
+                      {r.is_special && <Badge tone="danger">تخفیف ویژه</Badge>}
                       {!r.is_active && <Badge>پنهان توسط فروشنده</Badge>}
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">

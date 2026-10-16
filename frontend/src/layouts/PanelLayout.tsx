@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, AlertTriangle, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
+  Activity, AlertTriangle, BadgePercent, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
   Newspaper, Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
@@ -30,6 +30,7 @@ export const NAV: Item[] = [
   { to: "/panel/price-upload", label: "بارگذاری نرخ‌ها", icon: FileSpreadsheet, roles: LOAD },
   { to: "/panel/orders", label: "سفارش‌ها", icon: ShoppingCart, roles: [...M, "store"], mobile: true },
   { to: "/panel/my-shop", label: "فروشگاه اینترنتی من", icon: ShoppingBag, roles: ["store"], mobile: true },
+  { to: "/panel/specials", label: "تخفیفات ویژه", short: "تخفیفات", icon: BadgePercent, roles: ["store"], mobile: true },
   { to: "/panel/complaints", label: "شکایات", icon: MessageSquareWarning, roles: [...M, "store"], mobile: true },
   { to: "/panel/quotas", label: "سهمیه‌ها", icon: Truck, roles: ["union", "store"] },
   { to: "/panel/allocations", label: "تخصیص و توزیع", icon: Boxes, roles: M },

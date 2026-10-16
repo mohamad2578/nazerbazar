@@ -1109,3 +1109,44 @@ class VisitAnalyticsTests(Base):
         focused = c.get("/api/analytics/visits/", {"product": self.product.pk}).data
         self.assertEqual(focused["focus_product"], self.product.pk)
         self.assertEqual(sum(x["views"] for x in focused["series"]), 2)
+
+
+
+class SpecialOfferTests(Base):
+    """تخفیفات ویژه: فروشگاه تعریف می‌کند، صمت تایید می‌کند، مردم در صفحه تخفیفات می‌بینند."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000020", role=Role.SAMT, province=cls.prov)
+
+    def setUp(self):
+        cache.clear()
+
+    def _offer(self, **over):
+        body = {"name": "روغن سرخ‌کردنی ۱.۵ لیتری", "old_price": 2_000_000, "price": 1_600_000,
+                "unit": "piece", "is_special": True, "is_active": True, "is_available": True}
+        body.update(over)
+        return self.client_for(self.stores[0].owner).post("/api/shop-products/", body, format="json")
+
+    def test_offer_is_public_only_after_samt_approval(self):
+        r = self._offer()
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(self.client.get("/api/public/special-offers/").data["count"], 0)
+        self.client_for(self.samt).post(f"/api/other-prices/{r.data['id']}/approve/")
+        rows = self.client.get("/api/public/special-offers/").data["results"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["discount_percent"], 20)
+        self.assertEqual(rows[0]["store"]["id"], self.stores[0].pk)
+
+    def test_special_offer_needs_a_real_discount(self):
+        self.assertEqual(self._offer(old_price=None).status_code, 400)
+        self.assertEqual(self._offer(old_price=1_500_000).status_code, 400)
+
+    def test_offers_are_sorted_by_biggest_discount(self):
+        a = self._offer(name="الف", old_price=1_000_000, price=900_000).data["id"]   # ۱۰٪
+        b = self._offer(name="ب", old_price=1_000_000, price=600_000).data["id"]    # ۴۰٪
+        for pid in (a, b):
+            self.client_for(self.samt).post(f"/api/other-prices/{pid}/approve/")
+        ids = [r["id"] for r in self.client.get("/api/public/special-offers/").data["results"]]
+        self.assertEqual(ids, [b, a])

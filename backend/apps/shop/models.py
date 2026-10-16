@@ -66,6 +66,9 @@ class ShopProduct(TimeStamped):
     is_available = models.BooleanField("موجود", default=True, db_index=True)
     is_active = models.BooleanField("نمایش در فروشگاه", default=True, db_index=True)
     order = models.PositiveSmallIntegerField("ترتیب نمایش", default=0)
+    # «تخفیف ویژه»: محصولی که فروشگاه با قیمت اصلی و درصد تخفیف تعریف کرده و در صفحه
+    # عمومی «تخفیفات فروشگاه‌ها» نمایش داده می‌شود (پس از تایید اداره صمت)
+    is_special = models.BooleanField("تخفیف ویژه", default=False, db_index=True)
 
     status = models.CharField("وضعیت تایید", max_length=10, choices=Status.choices,
                               default=Status.PENDING, db_index=True)

@@ -72,6 +72,7 @@ api = [
     path("public/stores/<int:pk>/reviews/", market.submit_review),
     path("public/stores/<int:pk>/shop/", shop.public_shop),
     path("public/shop-products/", shop.public_shop_products),
+    path("public/special-offers/", shop.public_special_offers),
     path("store/shop-summary/", shop.my_shop_summary),
     path("public/stores/<int:pk>/order/", orders.place_order),
     path("public/orders/mine/", orders.my_orders),

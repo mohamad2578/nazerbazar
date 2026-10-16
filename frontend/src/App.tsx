@@ -24,6 +24,8 @@ const NewsDetail = lazy(() => import("./pages/public/News").then((m) => ({ defau
 const NewsAdmin = lazy(() => import("./pages/panel/News"));
 const SupplierList = lazy(() => import("./pages/panel/SupplierList"));
 const Visits = lazy(() => import("./pages/panel/Visits"));
+const Specials = lazy(() => import("./pages/panel/Specials"));
+const Discounts = lazy(() => import("./pages/public/Discounts"));
 
 const Dashboard = lazy(() => import("./pages/panel/Dashboard"));
 const Stores = lazy(() => import("./pages/panel/Stores"));
@@ -85,6 +87,7 @@ export default function App() {
           <Route path="account" element={<RequireAuth><Account /></RequireAuth>} />
           <Route path="orders" element={<RequireAuth><MyOrders /></RequireAuth>} />
           <Route path="rates" element={<Rates />} />
+          <Route path="discounts" element={<Discounts />} />
           <Route path="suppliers" element={<Suppliers />} />
           <Route path="news" element={<News />} />
           <Route path="news/:id" element={<NewsDetail />} />
@@ -100,6 +103,7 @@ export default function App() {
           <Route path="other-prices" element={<RequireAuth roles={OTHER_PRICES}><OtherPrices /></RequireAuth>} />
           <Route path="profile" element={<RequireAuth roles={["store"]}><StoreProfile /></RequireAuth>} />
           <Route path="my-shop" element={<RequireAuth roles={["store"]}><MyShop /></RequireAuth>} />
+          <Route path="specials" element={<RequireAuth roles={["store"]}><Specials /></RequireAuth>} />
           <Route path="orders" element={<RequireAuth roles={["store", "union", "chamber", "governorate"]}><Orders /></RequireAuth>} />
           <Route path="complaints" element={<Complaints />} />
           <Route path="complaints/:id" element={<ComplaintDetail />} />

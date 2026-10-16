@@ -41,9 +41,19 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "id", "store", "store_name", "union_name", "category", "category_name", "name", "description", "image",
             "price", "old_price", "discount_percent", "unit", "unit_display", "brand",
             "is_available", "is_active", "order", "created_at",
-            "status", "status_display", "reviewed_at", "review_note",
+            "status", "status_display", "reviewed_at", "review_note", "is_special",
         ]
         read_only_fields = ["store", "status", "reviewed_at", "review_note"]
+
+    def validate(self, attrs):
+        special = attrs.get("is_special", getattr(self.instance, "is_special", False))
+        if special:
+            price = attrs.get("price", getattr(self.instance, "price", None))
+            old = attrs.get("old_price", getattr(self.instance, "old_price", None))
+            if not old or not price or old <= price:
+                raise serializers.ValidationError(
+                    {"old_price": "برای تخفیف ویژه، قیمت اصلی باید از قیمت با تخفیف بیشتر باشد."})
+        return attrs
 
 
 class ShopCategoryViewSet(viewsets.ModelViewSet):
@@ -62,7 +72,7 @@ class MyShopProductViewSet(ScopedModelViewSet):
     serializer_class = ShopProductSerializer
     read_roles = ("governorate", "samt", "chamber", "union", "store")
     write_roles = ("store",)
-    filterset_fields = ["category", "is_active", "is_available", "store"]
+    filterset_fields = ["category", "is_active", "is_available", "store", "is_special"]
     search_fields = ["name", "brand", "description"]
 
     def _my_store(self) -> Store:
@@ -170,7 +180,7 @@ class ShopPriceReviewViewSet(ScopedModelViewSet):
     read_roles = ("samt", "governorate", "chamber", "union")
     write_roles = ("samt",)
     http_method_names = ["get", "post", "head", "options"]
-    filterset_fields = ["status", "store", "category", "store__union"]
+    filterset_fields = ["status", "store", "category", "store__union", "is_special"]
     search_fields = ["name", "brand", "store__name"]
     ordering_fields = ["created_at", "price"]
 
@@ -209,3 +219,47 @@ class ShopPriceReviewViewSet(ScopedModelViewSet):
             "approved": qs.filter(status=ShopProduct.Status.APPROVED).count(),
             "rejected": qs.filter(status=ShopProduct.Status.REJECTED).count(),
         })
+
+
+class SpecialOfferSerializer(serializers.ModelSerializer):
+    """کارت محصول تخفیف ویژه برای صفحه عمومی، همراه با مشخصات فروشگاه."""
+
+    unit_display = serializers.CharField(source="get_unit_display", read_only=True)
+    discount_percent = serializers.IntegerField(read_only=True)
+    store = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShopProduct
+        fields = ["id", "name", "description", "image", "brand", "price", "old_price", "discount_percent",
+                  "unit_display", "is_available", "store"]
+
+    def get_store(self, p):
+        s = p.store
+        return {"id": s.pk, "name": s.name, "address": s.address, "phone": s.phone,
+                "lat": s.lat, "lng": s.lng}
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_special_offers(request):
+    """«تخفیفات فروشگاه‌ها»: محصولات تخفیف ویژه تاییدشده، بیشترین تخفیف اول."""
+    from django.db.models import ExpressionWrapper, F, FloatField
+
+    from apps.core.pagination import Pagination
+
+    qs = (
+        ShopProduct.objects.filter(
+            is_special=True, is_active=True, status=ShopProduct.Status.APPROVED,
+            store__status=Store.Status.ACTIVE, old_price__gt=F("price"),
+        )
+        .select_related("store")
+        .annotate(off=ExpressionWrapper((F("old_price") - F("price")) * 1.0 / F("old_price"), output_field=FloatField()))
+    )
+    if county := request.query_params.get("county"):
+        qs = stores_in_county(qs, county, prefix="store__")
+    if q := request.query_params.get("q"):
+        qs = qs.filter(name__icontains=q)
+    ordering = {"price": "price", "recent": "-created_at"}.get(request.query_params.get("ordering"), "-off")
+    paginator = Pagination()
+    page = paginator.paginate_queryset(qs.order_by(ordering, "-created_at"), request)
+    return paginator.get_paginated_response(SpecialOfferSerializer(page, many=True, context={"request": request}).data)

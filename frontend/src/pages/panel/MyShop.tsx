@@ -31,7 +31,7 @@ export default function MyShop() {
 
   const q = useQuery({
     queryKey: ["shop-products", search, filter],
-    queryFn: () => api.get<Page<ShopProductT>>("/shop-products/", { search, is_active: filter || undefined, page_size: 100 }),
+    queryFn: () => api.get<Page<ShopProductT>>("/shop-products/", { search, is_active: filter || undefined, is_special: false, page_size: 100 }),
   });
   const del = useMutation({
     mutationFn: (id: number) => api.del(`/shop-products/${id}/`),
@@ -85,7 +85,7 @@ export default function MyShop() {
           </Empty>
         </Card>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(9.25rem,1fr))] gap-3">
           {rows.map((p) => (
             <Card key={p.id} className={cx("overflow-hidden", !p.is_active && "opacity-60")}>
               <div className="relative aspect-square bg-surface-2">

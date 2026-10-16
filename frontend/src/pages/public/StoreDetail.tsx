@@ -146,7 +146,7 @@ function ShopSection({ storeId, storeName }: { storeId: number; storeName: strin
         </div>
       )}
       {/* عرض ثابت کارت‌ها تا تصویر بزرگِ یک محصول، کل بخش را بزرگ نکند */}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(9.25rem,1fr))] gap-3">
         {shown.map((p) => (
           <Card key={p.id} className={cx("overflow-hidden", !p.is_available && "opacity-70")}>
             <div className="relative aspect-square bg-surface-2">

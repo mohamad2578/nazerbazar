@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.db.models.functions import ExtractHour, TruncDay, TruncHour
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -11,6 +11,7 @@ from rest_framework.throttling import AnonRateThrottle
 
 from apps.core.permissions import role_permission
 from apps.market.models import Product
+from apps.orgs.models import Store
 
 from .models import Visit
 
@@ -84,16 +85,28 @@ def visits_report(request):
     # تفکیک ساعتی برای بازه‌های تا ۳ روز، روزانه برای بقیه
     hourly = (end - start) <= timedelta(days=3)
     trunc = TruncHour if hourly else TruncDay
+    # با ?product=<id> روند فقط کلیک‌های همان کالا را نشان می‌دهد
+    focus = request.query_params.get("product")
+    base = products.filter(product_id=focus) if focus else pages
     series = (
-        pages.annotate(t=trunc("created_at")).values("t")
+        base.annotate(t=trunc("created_at")).values("t")
         .annotate(views=Count("pk"), visitors=Count("visitor", distinct=True)).order_by("t")
     )
-    top_products = (
-        products.exclude(product=None)
-        .values("product_id", "product__name", "product__union__name")
-        .annotate(views=Count("pk"), visitors=Count("visitor", distinct=True))
-        .order_by("-views")[:30]
+    # همه کالاها، حتی آن‌هایی که هیچ کلیکی نداشته‌اند، تا دقیقا معلوم باشد کدام دیده نشده
+    in_range = Q(visits__kind=Visit.Kind.PRODUCT, visits__created_at__gte=start, visits__created_at__lt=end)
+    all_products = (
+        Product.objects.filter(is_active=True).select_related("union")
+        .annotate(views=Count("visits", filter=in_range),
+                  visitors=Count("visits__visitor", filter=in_range, distinct=True))
+        .order_by("-views", "name")
     )
+    # بازدید صفحه هر فروشگاه (مسیر /s/<id>)
+    store_rows = (
+        pages.filter(path__regex=r"^/s/[0-9]+$").values("path")
+        .annotate(views=Count("pk"), visitors=Count("visitor", distinct=True)).order_by("-views")[:30]
+    )
+    store_ids = [int(r["path"].rsplit("/", 1)[1]) for r in store_rows]
+    store_names = dict(Store.objects.filter(pk__in=store_ids).values_list("pk", "name"))
     by_hour = pages.annotate(h=ExtractHour("created_at")).values("h").annotate(views=Count("pk")).order_by("h")
     top_pages = pages.values("path").annotate(views=Count("pk")).order_by("-views")[:15]
     by_platform = dict(pages.values_list("platform").annotate(n=Count("pk")))
@@ -107,10 +120,15 @@ def visits_report(request):
         "platform": {"web": by_platform.get("web", 0), "app": by_platform.get("app", 0)},
         "series": [{"t": r["t"], "views": r["views"], "visitors": r["visitors"]} for r in series],
         "by_hour": [{"h": r["h"], "views": r["views"]} for r in by_hour],
+        "focus_product": int(focus) if focus else None,
         "top_products": [
-            {"id": r["product_id"], "name": r["product__name"], "union": r["product__union__name"],
+            {"id": p.pk, "name": p.name, "union": p.union.name, "views": p.views, "visitors": p.visitors}
+            for p in all_products
+        ],
+        "top_stores": [
+            {"id": int(r["path"].rsplit("/", 1)[1]), "name": store_names.get(int(r["path"].rsplit("/", 1)[1]), "—"),
              "views": r["views"], "visitors": r["visitors"]}
-            for r in top_products
+            for r in store_rows
         ],
         "top_pages": list(top_pages),
     })

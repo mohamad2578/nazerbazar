@@ -17,7 +17,14 @@ function visitorId(): string {
   }
 }
 
+// یک رویداد تکراری در کمتر از یک ثانیه (مثلا رندر دوباره صفحه) دو بار شمرده نمی‌شود
+let last = { key: "", at: 0 };
+
 function send(body: Record<string, unknown>) {
+  const key = JSON.stringify(body);
+  const now = Date.now();
+  if (key === last.key && now - last.at < 1000) return;
+  last = { key, at: now };
   try {
     const token = JSON.parse(localStorage.getItem("nb.tokens") || "null")?.access;
     fetch(`${BASE}/public/track/`, {

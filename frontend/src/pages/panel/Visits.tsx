@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Eye, MousePointerClick, Smartphone, Users } from "lucide-react";
+import { Eye, MousePointerClick, Search, Smartphone, Users, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { BarsChart } from "../../components/charts";
 import { Card, DataTable, Empty, Input, Loading, PageHeader, Segmented, Stat } from "../../components/ui";
@@ -12,7 +12,9 @@ type Report = {
   platform: { web: number; app: number };
   series: { t: string; views: number; visitors: number }[];
   by_hour: { h: number; views: number }[];
+  focus_product: number | null;
   top_products: { id: number; name: string; union: string; views: number; visitors: number }[];
+  top_stores: { id: number; name: string; views: number; visitors: number }[];
   top_pages: { path: string; views: number }[];
 };
 
@@ -29,6 +31,8 @@ export default function Visits() {
   const [preset, setPreset] = useState("7d");
   const [custom, setCustom] = useState(() => ({ from: toLocalInput(new Date(Date.now() - 86400000)), to: toLocalInput(new Date()) }));
 
+  const [focus, setFocus] = useState<{ id: number; name: string } | null>(null);
+  const [search, setSearch] = useState("");
   const range = useMemo(() => {
     if (preset === "custom") return { from: custom.from, to: custom.to };
     const hours = PRESETS.find((p) => p[0] === preset)![2];
@@ -38,8 +42,8 @@ export default function Visits() {
   }, [preset, custom]);
 
   const q = useQuery({
-    queryKey: ["visits", range],
-    queryFn: () => api.get<Report>("/analytics/visits/", range),
+    queryKey: ["visits", range, focus?.id],
+    queryFn: () => api.get<Report>("/analytics/visits/", { ...range, product: focus?.id }),
     refetchInterval: 60_000,
   });
   const d = q.data;
@@ -81,32 +85,63 @@ export default function Visits() {
           </div>
 
           <Card className="p-4">
-            <h2 className="mb-3 font-semibold">روند بازدید ({d.granularity === "hour" ? "ساعتی" : "روزانه"})</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">
+                {focus ? `روند کلیک روی «${focus.name}»` : "روند بازدید سامانه"} ({d.granularity === "hour" ? "ساعتی" : "روزانه"})
+              </h2>
+              {focus && (
+                <button onClick={() => setFocus(null)} className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-3 py-1 text-xs">
+                  <X className="size-3.5" /> نمایش کل سامانه
+                </button>
+              )}
+            </div>
             {series.length ? (
-              <BarsChart data={series} x="label" series={[{ key: "views", label: "بازدید" }, { key: "visitors", label: "بازدیدکننده" }]} />
+              <BarsChart data={series} x="label" series={focus
+                ? [{ key: "views", label: "کلیک" }, { key: "visitors", label: "نفر" }]
+                : [{ key: "views", label: "بازدید" }, { key: "visitors", label: "بازدیدکننده" }]} />
             ) : <Empty title="در این بازه بازدیدی ثبت نشده است" />}
           </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <h2 className="p-4 pb-2 font-semibold">کالاهای پربازدید</h2>
-              {d.top_products.length ? (
-                <DataTable
-                  rows={d.top_products}
-                  columns={[
-                    { key: "name", label: "کالا" },
-                    { key: "union", label: "اتحادیه", hideOnMobile: true },
-                    { key: "views", label: "کلیک", render: (r) => num(r.views) },
-                    { key: "visitors", label: "نفر", render: (r) => num(r.visitors) },
-                  ]}
-                />
-              ) : <Empty title="هنوز روی کالایی کلیک نشده است" />}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-4 pb-2">
+                <h2 className="font-semibold">کلیک روی هر کالا</h2>
+                <div className="relative w-full sm:w-48">
+                  <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+                  <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="جستجوی کالا" className="h-9 pr-9" />
+                </div>
+              </div>
+              <p className="px-4 pb-2 text-xs text-muted">همه کالاها، حتی بدون کلیک. روی هر کالا بزنید تا روند کلیک همان کالا در نمودار بالا نمایش داده شود.</p>
+              <DataTable
+                rows={d.top_products.filter((r) => !search || r.name.includes(search))}
+                onRowClick={(r) => setFocus({ id: r.id, name: r.name })}
+                columns={[
+                  { key: "name", label: "کالا", render: (r) => <span className={focus?.id === r.id ? "font-bold text-brand" : ""}>{r.name}</span> },
+                  { key: "union", label: "اتحادیه", hideOnMobile: true },
+                  { key: "views", label: "کلیک", render: (r) => <b className="tabular">{num(r.views)}</b> },
+                  { key: "visitors", label: "نفر", render: (r) => num(r.visitors) },
+                ]}
+              />
             </Card>
             <Card className="p-4">
               <h2 className="mb-3 font-semibold">ساعات اوج بازدید</h2>
               <BarsChart data={hours} x="label" series={[{ key: "views", label: "بازدید" }]} height={220} />
             </Card>
           </div>
+
+          <Card>
+            <h2 className="p-4 pb-2 font-semibold">بازدید صفحه فروشگاه‌ها</h2>
+            {d.top_stores.length ? (
+              <DataTable
+                rows={d.top_stores}
+                columns={[
+                  { key: "name", label: "فروشگاه" },
+                  { key: "views", label: "بازدید", render: (r) => <b className="tabular">{num(r.views)}</b> },
+                  { key: "visitors", label: "نفر", render: (r) => num(r.visitors) },
+                ]}
+              />
+            ) : <Empty title="هنوز صفحه فروشگاهی دیده نشده است" />}
+          </Card>
 
           <Card>
             <h2 className="p-4 pb-2 font-semibold">صفحات پربازدید</h2>

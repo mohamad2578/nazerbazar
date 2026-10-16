@@ -1093,3 +1093,19 @@ class VisitAnalyticsTests(Base):
     def test_only_management_sees_the_report_and_visitor_is_required(self):
         self.assertEqual(self.client_for(self.uni).get("/api/analytics/visits/").status_code, 403)
         self.assertEqual(APIClient().post("/api/public/track/", {"path": "/"}, format="json").status_code, 400)
+
+
+    def test_every_product_is_listed_and_one_product_can_be_focused(self):
+        other = Product.objects.create(union=self.union, name="کالای بدون کلیک", unit="kg")
+        self._track("a", kind="product", path=f"/p/{self.product.pk}", product=self.product.pk)
+        self._track("b", kind="product", path=f"/p/{self.product.pk}", product=self.product.pk)
+        self._track("a", path=f"/s/{self.stores[0].pk}")
+        c = self.client_for(self.samt)
+        r = c.get("/api/analytics/visits/").data
+        rows = {p["id"]: p for p in r["top_products"]}
+        self.assertEqual(rows[self.product.pk]["views"], 2)
+        self.assertEqual(rows[other.pk]["views"], 0)          # کالای بدون کلیک هم در فهرست هست
+        self.assertEqual(r["top_stores"][0]["name"], self.stores[0].name)
+        focused = c.get("/api/analytics/visits/", {"product": self.product.pk}).data
+        self.assertEqual(focused["focus_product"], self.product.pk)
+        self.assertEqual(sum(x["views"] for x in focused["series"]), 2)

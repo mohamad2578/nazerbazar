@@ -1,0 +1,17 @@
+{
+  "name": "nazer724-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "اپلیکیشن اندروید ناظر ۷۲۴ (Capacitor) — نسخه وب را از nazer724.ir بارگذاری می‌کند",
+  "scripts": {
+    "assets": "python scripts/make_assets.py",
+    "sync": "npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/cli": "^7.4.0",
+    "@capacitor/core": "^7.4.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  }
+}

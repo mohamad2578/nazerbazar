@@ -1,0 +1,33 @@
+{
+  "appId": "ir.nazer724.app",
+  "appName": "ناظر ۷۲۴",
+  "webDir": "www",
+  "server": {
+    "url": "https://nazer724.ir",
+    "androidScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": ["nazer724.ir", "www.nazer724.ir"]
+  },
+  "android": {
+    "appendUserAgent": "Nazer724App/1.0",
+    "allowMixedContent": false,
+    "backgroundColor": "#0f766e"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2200,
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 400,
+      "backgroundColor": "#0f766e",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0f766e",
+      "overlaysWebView": false
+    }
+  }
+}

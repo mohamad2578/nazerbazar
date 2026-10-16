@@ -139,7 +139,7 @@ def trends(request):
 @api_view(["GET"])
 @permission_classes([PANEL])
 def price_changes(request):
-    """بیشترین تغییرات نرخ مصوب در بازه (Top movers)"""
+    """بیشترین تغییرات حداکثر قیمت در بازه (Top movers)"""
     days = _days(request)
     qs = S(OfficialPrice.objects.filter(created_at__gte=timezone.now() - timedelta(days=days), previous_price__gt=0), request)
     rows = [
@@ -308,12 +308,12 @@ EXPORTS = {
         ("name", "فروشگاه"), ("union", "اتحادیه"), ("status", "وضعیت"), ("owner", "مالک"), ("mobile", "موبایل"),
         ("phone", "تلفن"), ("address", "نشانی"), ("rating", "امتیاز"), ("offers", "تعداد قیمت"), ("complaints", "شکایات"),
     ]),
-    "prices": ("نرخ‌های مصوب", lambda r: [
+    "prices": ("حداکثر قیمت‌ها", lambda r: [
         {"name": p.name, "union": p.union.name, "unit": p.get_unit_display(), "price": p.current_price,
          "min": p.min_allowed_price, "changed": timezone.localtime(p.price_changed_at).strftime("%Y-%m-%d %H:%M") if p.price_changed_at else ""}
         for p in S(Product.objects.filter(is_active=True).select_related("union"), r)
     ], [
-        ("name", "کالا"), ("union", "اتحادیه"), ("unit", "واحد"), ("price", "نرخ مصوب (ریال)"),
+        ("name", "کالا"), ("union", "اتحادیه"), ("unit", "واحد"), ("price", "حداکثر قیمت (ریال)"),
         ("min", "حداقل مجاز (ریال)"), ("changed", "آخرین تغییر"),
     ]),
     "complaints": ("شکایات", lambda r: [
@@ -325,7 +325,7 @@ EXPORTS = {
         for c in S(Complaint.objects.select_related("store", "product", "union"), r)[:5000]
     ], [
         ("code", "کد رهگیری"), ("kind", "نوع"), ("status", "وضعیت"), ("store", "فروشگاه"), ("product", "کالا"),
-        ("union", "اتحادیه"), ("paid", "قیمت دریافتی"), ("official", "نرخ مصوب"), ("violation", "تخلف محرز"),
+        ("union", "اتحادیه"), ("paid", "قیمت دریافتی"), ("official", "حداکثر قیمت"), ("violation", "تخلف محرز"),
         ("created", "زمان ثبت"),
     ]),
 }

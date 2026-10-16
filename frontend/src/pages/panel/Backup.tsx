@@ -17,7 +17,7 @@ const LABELS: Record<string, string> = {
   "orgs.store": "فروشگاه‌ها",
   "market.category": "دسته‌بندی کالا",
   "market.product": "کالاهای اساسی",
-  "market.officialprice": "تاریخچه نرخ مصوب",
+  "market.officialprice": "تاریخچه حداکثر قیمت",
   "market.storeoffer": "قیمت فروشگاه‌ها",
   "market.offerlog": "سوابق قیمت",
   "market.review": "نظرات",

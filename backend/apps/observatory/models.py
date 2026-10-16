@@ -113,7 +113,7 @@ def settings_population_million():
 
 class Alert(models.Model):
     class Kind(models.TextChoices):
-        OFFICIAL_JUMP = "official_jump", "جهش نرخ مصوب"
+        OFFICIAL_JUMP = "official_jump", "جهش حداکثر قیمت"
         MARKET_JUMP = "market_jump", "جهش قیمت بازار"
         SHORTAGE = "shortage", "کاهش عرضه"
         STALE = "stale", "عدم به‌روزرسانی قیمت"

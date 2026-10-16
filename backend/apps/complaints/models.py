@@ -34,7 +34,7 @@ class Complaint(TimeStamped):
     shop_address = models.CharField("نشانی فروشگاه", max_length=300, blank=True)
     # اطلاعات لحظه ثبت (برای استناد)
     announced_price = models.PositiveBigIntegerField("قیمت اعلامی فروشگاه", null=True, blank=True)
-    official_price = models.PositiveBigIntegerField("نرخ مصوب", null=True, blank=True)
+    official_price = models.PositiveBigIntegerField("حداکثر قیمت", null=True, blank=True)
     paid_price = models.PositiveBigIntegerField("قیمت دریافتی", null=True, blank=True)
     description = models.TextField("شرح")
     attachment = models.FileField("تصویر فاکتور/مستند", upload_to="complaints/%Y/%m/", blank=True)

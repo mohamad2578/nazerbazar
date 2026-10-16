@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, BadgeCheck, ChevronLeft, Clock, Info, List, LocateFixed, Map as MapIcon, Phone, ShieldAlert, ShoppingBag, Star } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Directions from "../../components/Directions";
 import { ProductThumb } from "../../components/ProductCard";
@@ -8,6 +8,7 @@ import { Badge, Card, cx, Empty, ErrorBox, Loading, Segmented } from "../../comp
 import { api } from "../../lib/api";
 import { ago, km, num, telLink, toman } from "../../lib/format";
 import { useGeo } from "../../lib/prefs";
+import { trackProduct } from "../../lib/track";
 
 const MapView = lazy(() => import("../../components/MapView"));
 
@@ -34,6 +35,10 @@ type Detail = {
 
 export default function ProductDetail() {
   const { id } = useParams();
+  // هر بار باز شدن صفحه یک کالا، یک «کلیک روی کالا» در آمار مدیریت ثبت می‌شود
+  useEffect(() => {
+    if (id) trackProduct(Number(id), `/p/${id}`);
+  }, [id]);
   const nav = useNavigate();
   const geo = useGeo();
   const [view, setView] = useState<"list" | "map">("list");
@@ -90,7 +95,7 @@ export default function ProductDetail() {
       {!p.offers.length ? (
         <Card>
           <Empty title="هنوز فروشگاهی برای این کالا قیمت ثبت نکرده است">
-            اگر این کالا را بالاتر از نرخ مصوب خریده‌اید، <Link to={`/report?product=${p.id}`} className="text-brand underline">گزارش دهید</Link>.
+            اگر این کالا را بالاتر از حداکثر قیمت خریده‌اید، <Link to={`/report?product=${p.id}`} className="text-brand underline">گزارش دهید</Link>.
           </Empty>
         </Card>
       ) : view === "map" ? (
@@ -114,8 +119,8 @@ export default function ProductDetail() {
 
       <p className="flex items-start gap-2 rounded-xl bg-surface-2 p-3 text-xs leading-6 text-muted">
         <Info className="mt-1 size-4 shrink-0" />
-        قیمت‌ها از کمترین به بیشترین مرتب شده‌اند. فروشگاه‌ها مجازند حداکثر {num(p.max_discount_percent)}٪ کمتر از نرخ مصوب بفروشند.
-        اگر نرخ مصوب تغییر کند و فروشگاهی ظرف ۲۴ ساعت قیمت خود را به‌روز نکند، تا زمان به‌روزرسانی در این فهرست نمایش داده نمی‌شود.
+        قیمت‌ها از کمترین به بیشترین مرتب شده‌اند. فروشگاه‌ها مجازند حداکثر {num(p.max_discount_percent)}٪ کمتر از حداکثر قیمت بفروشند.
+        اگر حداکثر قیمت تغییر کند و فروشگاهی ظرف ۲۴ ساعت قیمت خود را به‌روز نکند، تا زمان به‌روزرسانی در این فهرست نمایش داده نمی‌شود.
       </p>
     </div>
   );

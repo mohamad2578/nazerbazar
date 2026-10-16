@@ -17,7 +17,7 @@ type OtherProduct = {
 
 const TONE: Record<string, "warn" | "ok" | "danger"> = { pending: "warn", approved: "ok", rejected: "danger" };
 
-/** کارتابل «نرخ مصوب سایر کالاها» — کالاهای غیراساسی که فروشگاه خودش قیمت می‌گذارد
+/** کارتابل «حداکثر قیمت سایر کالاها» — کالاهای غیراساسی که فروشگاه خودش قیمت می‌گذارد
  *  و تا تایید کارشناس اداره صمت به مردم نمایش داده نمی‌شود. */
 export default function OtherPrices() {
   const { user } = useAuth();
@@ -36,14 +36,14 @@ export default function OtherPrices() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="نرخ مصوب سایر کالاها"
+        title="حداکثر قیمت سایر کالاها"
         subtitle="کالاهای غیراساسی فروشگاه‌ها؛ قیمت را فروشنده تعیین می‌کند و پس از تایید شما نمایش داده می‌شود."
       />
 
       <Card className="flex items-start gap-2 border-brand/30 bg-brand-soft/60 p-3 text-xs leading-6 text-brand">
         <Info className="mt-0.5 size-4 shrink-0" />
         <span>
-          این کالاها نرخ مصوب اتحادیه ندارند و سقف یا کف قیمتی برایشان اعمال نمی‌شود. محصول تا
+          این کالاها حداکثر قیمت اتحادیه ندارند و سقف یا کف قیمتی برایشان اعمال نمی‌شود. محصول تا
           زمانی که تایید نشود در صفحه عمومی فروشگاه دیده نمی‌شود، و هر بار که فروشنده نام یا
           قیمت را تغییر دهد دوباره به همین کارتابل برمی‌گردد.
         </span>

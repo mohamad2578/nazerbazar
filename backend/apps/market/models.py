@@ -64,7 +64,7 @@ class Product(TimeStamped):
     unit_amount = models.DecimalField("مقدار واحد", max_digits=10, decimal_places=3, default=1)
     description = models.TextField("توضیحات", blank=True)
     image = models.ImageField("تصویر", upload_to="products/", blank=True)
-    current_price = models.PositiveBigIntegerField("نرخ مصوب (ریال)", default=0)
+    current_price = models.PositiveBigIntegerField("حداکثر قیمت (ریال)", default=0)
     max_discount_percent = models.PositiveSmallIntegerField(
         "حداکثر تخفیف مجاز (%)", default=default_max_discount, validators=[MaxValueValidator(90)]
     )
@@ -88,7 +88,7 @@ class Product(TimeStamped):
 
 
 class OfficialPrice(models.Model):
-    """نرخ مصوب هر کالا و تاریخچه آن.
+    """حداکثر قیمت هر کالا و تاریخچه آن.
 
     نرخی که **اتحادیه** ثبت می‌کند در وضعیت «در انتظار تایید» می‌ماند و تا تایید
     اتاق اصناف (یا اداره صمت/مدیر کل) روی سایت اعمال نمی‌شود. نرخی که **اداره صمت**،
@@ -121,8 +121,8 @@ class OfficialPrice(models.Model):
     SCOPE = {"province": "product__union__chamber__county__province", "chamber": "product__union__chamber", "union": "product__union"}
 
     class Meta:
-        verbose_name = "نرخ مصوب"
-        verbose_name_plural = "تاریخچه نرخ‌های مصوب"
+        verbose_name = "حداکثر قیمت"
+        verbose_name_plural = "تاریخچه حداکثر قیمت‌ها"
         ordering = ["-created_at"]
 
 

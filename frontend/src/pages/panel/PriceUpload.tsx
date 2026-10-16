@@ -11,7 +11,7 @@ type Change = {
 };
 type Result = { dry_run: boolean; total_rows: number; changes: Change[]; errors: { row: number; error: string }[]; skipped: number; applied: number };
 
-/** بارگذاری گروهی نرخ مصوب از فایل اکسل — اداره صمت و استانداری. */
+/** بارگذاری گروهی حداکثر قیمت از فایل اکسل — اداره صمت و استانداری. */
 export default function PriceUpload() {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -55,7 +55,7 @@ export default function PriceUpload() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="بارگذاری نرخ‌های مصوب" subtitle="نرخ کالاهای حوزه خود را گروهی با فایل اکسل ثبت کنید." />
+      <PageHeader title="بارگذاری حداکثر قیمت‌ها" subtitle="نرخ کالاهای حوزه خود را گروهی با فایل اکسل ثبت کنید." />
 
       <Card className="p-5">
         <div className="flex items-start gap-3">
@@ -154,7 +154,7 @@ export default function PriceUpload() {
           <div className="mt-4 flex items-start gap-2 rounded-2xl border border-ok/30 bg-ok-soft p-4 text-sm text-ok">
             <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
             <div>
-              <p className="font-medium">{num(done.applied)} نرخ مصوب با موفقیت اعمال شد.</p>
+              <p className="font-medium">{num(done.applied)} حداکثر قیمت با موفقیت اعمال شد.</p>
               <p className="mt-1 text-xs">قیمت فروشگاه‌های مربوط هم‌تراز شد و اعلان به‌روزرسانی برایشان ارسال گردید.</p>
             </div>
           </div>

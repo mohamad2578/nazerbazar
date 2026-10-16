@@ -77,14 +77,14 @@ export default function Home() {
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <QuickLink to="/subsidized" icon={<PackageCheck className="size-5" />} title="کالای تنظیم بازار" sub="سهمیه‌ای و یارانه‌ای" />
           <QuickLink to="/register-store" icon={<StoreIcon className="size-5" />} title="ثبت‌نام فروشگاه" sub="ویژه صاحبان صنف" />
-          <QuickLink to="/rates" icon={<ClipboardList className="size-5" />} title="نرخ‌نامه اتحادیه‌ها" sub="نرخ مصوب هر کالا" />
+          <QuickLink to="/rates" icon={<ClipboardList className="size-5" />} title="نرخ‌نامه اتحادیه‌ها" sub="حداکثر قیمت هر کالا" />
           <QuickLink to="/suppliers" icon={<Truck className="size-5" />} title="ثبت‌نام تامین‌کنندگان" sub="فرم تامین کالا" />
         </section>
       )}
 
       {!searching && !!stats.data?.latest_changes.length && (
         <section>
-          <Carousel title="آخرین تغییرات نرخ مصوب">
+          <Carousel title="آخرین تغییرات حداکثر قیمت">
             {stats.data.latest_changes.map((p) => {
               const up = p.previous_price ? p.official_price > p.previous_price : null;
               const change = p.previous_price ? ((p.official_price - p.previous_price) / p.previous_price) * 100 : null;

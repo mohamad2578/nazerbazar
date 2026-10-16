@@ -74,13 +74,13 @@ export default function Prices() {
       )}
       <PageHeader
         title={q.data!.store.acting_as ? `قیمت‌های ${q.data!.store.name}` : "قیمت‌های من"}
-        subtitle="قیمت هر کالا باید بین نرخ مصوب اتحادیه و حداکثر ۲۰٪ کمتر از آن باشد."
+        subtitle="قیمت هر کالا باید بین حداکثر قیمت اتحادیه و حداکثر ۲۰٪ کمتر از آن باشد."
         actions={staleCount > 0 && <Button variant="soft" onClick={confirmAll} loading={save.isPending}>تایید قیمت‌های معتبر</Button>}
       />
       {staleCount > 0 && (
         <Card className="flex items-start gap-2 border-danger/30 bg-danger-soft p-3 text-sm text-danger">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          نرخ مصوب {num(staleCount)} کالا تغییر کرده است. اگر ظرف ۲۴ ساعت قیمت را به‌روز یا تایید نکنید، آن کالا موقتا از فهرست عمومی فروشگاه شما حذف می‌شود.
+          حداکثر قیمت {num(staleCount)} کالا تغییر کرده است. اگر ظرف ۲۴ ساعت قیمت را به‌روز یا تایید نکنید، آن کالا موقتا از فهرست عمومی فروشگاه شما حذف می‌شود.
         </Card>
       )}
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -107,7 +107,7 @@ export default function Prices() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-medium">{i.name}</div>
-                  <div className="text-xs text-muted">هر {i.unit_display} · نرخ مصوب <b className="text-ink">{toman(i.official_price)}</b></div>
+                  <div className="text-xs text-muted">هر {i.unit_display} · حداکثر قیمت <b className="text-ink">{toman(i.official_price)}</b></div>
                 </div>
                 {i.is_stale ? (
                   <Badge tone="danger">{i.hidden ? "پنهان از فهرست" : `مهلت ${num(Math.max(0, Math.floor(h ?? 0)))} ساعت`}</Badge>
@@ -137,7 +137,7 @@ export default function Prices() {
                 {i.confirmed_at && <span>{ago(i.confirmed_at)}</span>}
               </div>
               <div className="mt-1 flex gap-3 text-[11px]">
-                <button className="text-brand" onClick={() => setDraft({ ...draft, [i.product]: { price: String(toToman(i.official_price)), available: true } })}>= نرخ مصوب</button>
+                <button className="text-brand" onClick={() => setDraft({ ...draft, [i.product]: { price: String(toToman(i.official_price)), available: true } })}>= حداکثر قیمت</button>
                 <button className="text-brand" onClick={() => setDraft({ ...draft, [i.product]: { price: String(toToman(i.min_allowed_price)), available: true } })}>حداقل مجاز</button>
               </div>
               {errors[String(i.product)] && <p className="mt-1 text-xs text-danger">{errors[String(i.product)]}</p>}

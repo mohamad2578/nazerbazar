@@ -30,7 +30,7 @@ def raise_official_price_alert(product: Product, old: int, new: int, change: flo
         f"official:{product.pk}:{new}",
         kind=Alert.Kind.OFFICIAL_JUMP,
         level=_level(change),
-        title=f"تغییر {change:+.1f}٪ نرخ مصوب «{product.name}»",
+        title=f"تغییر {change:+.1f}٪ حداکثر قیمت «{product.name}»",
         message=f"از {old:,} به {new:,} ریال توسط {product.union.name}",
         product=product,
         county=county,

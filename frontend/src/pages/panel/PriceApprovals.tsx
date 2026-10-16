@@ -28,7 +28,7 @@ export default function PriceApprovals() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="تایید نرخ‌های مصوب"
+        title="تایید حداکثر قیمت‌ها"
         subtitle="نرخی که اتحادیه ثبت می‌کند تا تایید شما روی سایت اعمال نمی‌شود."
       />
       <Card className="flex items-start gap-2 border-brand/30 bg-brand-soft/60 p-3 text-xs leading-6 text-brand">

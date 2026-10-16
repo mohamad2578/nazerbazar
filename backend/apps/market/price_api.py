@@ -1,4 +1,4 @@
-"""کارتابل تایید نرخ و بارگذاری گروهی نرخ‌های مصوب (اداره صمت)."""
+"""کارتابل تایید نرخ و بارگذاری گروهی حداکثر قیمت‌ها (اداره صمت)."""
 from io import BytesIO
 
 from django.db import transaction
@@ -88,7 +88,7 @@ def bulk_template(request):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "نرخ مصوب"
+    ws.title = "حداکثر قیمت"
     ws.sheet_view.rightToLeft = True
     ws.append(COLUMNS)
     for cell in ws[1]:
@@ -136,7 +136,7 @@ def _read_rows(file):
 @permission_classes([PriceLoaders])
 @parser_classes([MultiPartParser])
 def bulk_upload(request):
-    """بارگذاری گروهی نرخ مصوب از فایل اکسل.
+    """بارگذاری گروهی حداکثر قیمت از فایل اکسل.
 
     با `dry_run` فقط پیش‌نمایش تغییرات برگردانده می‌شود و چیزی ذخیره نمی‌گردد.
     """

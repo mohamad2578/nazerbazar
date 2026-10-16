@@ -7,7 +7,7 @@ import { toman } from "../../lib/format";
 
 type RateRow = { id: number; name: string; union_name: string; unit_display: string; official_price: number; min_allowed_price: number };
 
-/** نرخ‌نامه اتحادیه‌ها: نرخ مصوب همه کالاها، گروه‌بندی‌شده بر اساس اتحادیه. */
+/** نرخ‌نامه اتحادیه‌ها: حداکثر قیمت همه کالاها، گروه‌بندی‌شده بر اساس اتحادیه. */
 export default function Rates() {
   const q = useQuery({
     queryKey: ["rates"],
@@ -22,7 +22,7 @@ export default function Rates() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="نرخ‌نامه اتحادیه‌ها" subtitle="نرخ مصوب هر کالای اساسی به تفکیک اتحادیه" />
+      <PageHeader title="نرخ‌نامه اتحادیه‌ها" subtitle="حداکثر قیمت هر کالای اساسی به تفکیک اتحادیه" />
       {q.isLoading ? <Loading /> : !rows.length ? (
         <Card><Empty title="هنوز نرخی ثبت نشده است" /></Card>
       ) : (

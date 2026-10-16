@@ -68,14 +68,14 @@ export default function StoreDetail() {
       </Card>
 
       <section>
-        <h2 className="mb-1 font-semibold">کالاهای اساسی با نرخ مصوب</h2>
+        <h2 className="mb-1 font-semibold">کالاهای اساسی با حداکثر قیمت</h2>
         <p className="mb-3 text-xs text-muted">نرخ این کالاها را اتحادیه تعیین می‌کند و فروشگاه حداکثر تا ۲۰٪ زیر آن می‌تواند بفروشد.</p>
         <Card className="divide-y divide-line">
           {s.offers.map((o) => (
             <Link key={o.product} to={`/p/${o.product}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-2">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{o.name}</div>
-                <div className="text-xs text-muted">نرخ مصوب {toman(o.official_price)} · هر {o.unit_display}</div>
+                <div className="text-xs text-muted">حداکثر قیمت {toman(o.official_price)} · هر {o.unit_display}</div>
               </div>
               <div className="shrink-0 text-left">
                 <div className="font-semibold tabular">{toman(o.price)}</div>

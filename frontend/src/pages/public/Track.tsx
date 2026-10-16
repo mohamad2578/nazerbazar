@@ -29,7 +29,7 @@ export function ComplaintTimeline({ c }: { c: ComplaintT }) {
       </div>
       {(c.paid_price || c.official_price) && (
         <div className="mt-1 text-xs text-muted">
-          پرداختی {toman(c.paid_price)} · نرخ مصوب {toman(c.official_price)}
+          پرداختی {toman(c.paid_price)} · حداکثر قیمت {toman(c.official_price)}
         </div>
       )}
       <ol className="mt-4 space-y-3 border-r-2 border-line pr-4">

@@ -65,7 +65,7 @@ function PricesTab({ days }: { days: string }) {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="font-semibold">{product ? "روند قیمت کالا" : "شاخص قیمت (پایه = ۱۰۰)"}</h2>
-            <p className="text-xs text-muted">{product ? "نرخ مصوب در برابر میانگین و کمینه قیمت فروشگاه‌ها (تومان)" : "میانگین نسبت قیمت هر کالا به روز اول بازه"}</p>
+            <p className="text-xs text-muted">{product ? "حداکثر قیمت در برابر میانگین و کمینه قیمت فروشگاه‌ها (تومان)" : "میانگین نسبت قیمت هر کالا به روز اول بازه"}</p>
           </div>
           <Select value={product} onChange={(e) => setProduct(e.target.value)} className="h-9 w-56 text-sm" aria-label="کالا">
             <option value="">شاخص کل</option>
@@ -74,13 +74,13 @@ function PricesTab({ days }: { days: string }) {
         </div>
         {trend.isLoading ? <Loading /> : !trend.data?.series?.length ? <p className="py-10 text-center text-sm text-muted">داده‌ای در این بازه نیست.</p> : product ? (
           <TrendChart data={trend.data.series.map((r: any) => ({ ...r, official: r.official / 10, avg: r.avg && r.avg / 10, min: r.min && r.min / 10 }))}
-            series={[{ key: "official", label: "نرخ مصوب" }, { key: "avg", label: "میانگین فروشگاه‌ها" }, { key: "min", label: "کمترین قیمت" }]} />
+            series={[{ key: "official", label: "حداکثر قیمت" }, { key: "avg", label: "میانگین فروشگاه‌ها" }, { key: "min", label: "کمترین قیمت" }]} />
         ) : (
-          <TrendChart data={trend.data.series} series={[{ key: "official_index", label: "نرخ مصوب" }, { key: "market_index", label: "قیمت فروشگاه‌ها" }]} format={(v) => num(v, 1)} />
+          <TrendChart data={trend.data.series} series={[{ key: "official_index", label: "حداکثر قیمت" }, { key: "market_index", label: "قیمت فروشگاه‌ها" }]} format={(v) => num(v, 1)} />
         )}
       </Card>
       <Card>
-        <h2 className="px-4 pt-4 font-semibold">بیشترین تغییرات نرخ مصوب</h2>
+        <h2 className="px-4 pt-4 font-semibold">بیشترین تغییرات حداکثر قیمت</h2>
         <DataTable<any> rows={(movers.data ?? []).map((r, i) => ({ ...r, id: i }))} columns={[
           { key: "product_name", label: "کالا" }, { key: "union_name", label: "اتحادیه" },
           { key: "previous_price", label: "نرخ قبلی", render: (r) => toman(r.previous_price) }, { key: "price", label: "نرخ جدید", render: (r) => toman(r.price) },
@@ -140,7 +140,7 @@ function BasketTab({ days }: { days: string }) {
     <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
       <Card className="p-4">
         <h2 className="font-semibold">روند هزینه ماهانه سبد خانوار (تومان)</h2>
-        <p className="mb-2 text-xs text-muted">محاسبه از قیمت واقعی فروشگاه‌ها؛ در نبود قیمت فروشگاهی، نرخ مصوب</p>
+        <p className="mb-2 text-xs text-muted">محاسبه از قیمت واقعی فروشگاه‌ها؛ در نبود قیمت فروشگاهی، حداکثر قیمت</p>
         {series.length ? <TrendChart data={series.map((s: any) => ({ ...s, total: s.total / 10 }))} series={[{ key: "total", label: "سبد خانوار" }]} /> : <p className="py-10 text-center text-sm text-muted">داده‌ای نیست</p>}
       </Card>
       <Card className="p-4">

@@ -19,7 +19,7 @@ type Category = { id: number; name: string };
 
 const UNITS = [["piece", "عدد"], ["kg", "کیلوگرم"], ["g", "گرم"], ["pack", "بسته"], ["l", "لیتر"], ["m", "متر"], ["service", "خدمت"]];
 
-/** فروشگاه اینترنتی: محصولات اختصاصی خود فروشگاه، مستقل از کالاهای اساسی و نرخ مصوب اتحادیه. */
+/** فروشگاه اینترنتی: محصولات اختصاصی خود فروشگاه، مستقل از کالاهای اساسی و حداکثر قیمت اتحادیه. */
 export default function MyShop() {
   const { user } = useAuth();
   const store = user!.store;
@@ -61,7 +61,7 @@ export default function MyShop() {
       <Card className="flex items-start gap-2 border-brand/30 bg-brand-soft/60 p-3 text-xs leading-6 text-brand">
         <Info className="mt-0.5 size-4 shrink-0" />
         <span>
-          این بخش با «کالاهای اساسی» فرق دارد: آن‌ها را اتحادیه تعریف می‌کند و قیمتشان باید برابر نرخ مصوب یا حداکثر ۲۰٪ کمتر باشد.
+          این بخش با «کالاهای اساسی» فرق دارد: آن‌ها را اتحادیه تعریف می‌کند و قیمتشان باید برابر حداکثر قیمت یا حداکثر ۲۰٪ کمتر باشد.
           اینجا محصولات خودتان را آزادانه و با قیمت دلخواه ثبت می‌کنید.
         </span>
       </Card>

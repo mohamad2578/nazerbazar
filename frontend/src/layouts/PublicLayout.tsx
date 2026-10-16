@@ -1,9 +1,11 @@
 import { Home, Newspaper, LayoutDashboard, Map, Search, ShieldAlert, User } from "lucide-react";
-import { NavLink, Link, Outlet } from "react-router-dom";
+import { useEffect } from "react";
+import { NavLink, Link, Outlet, useLocation } from "react-router-dom";
 import CountyPicker from "../components/CountyPicker";
 import InstallPrompt from "../components/InstallPrompt";
 import { cx } from "../components/ui";
 import { isPanelUser, useAuth } from "../lib/auth";
+import { trackPage } from "../lib/track";
 
 export function Logo({ small }: { small?: boolean }) {
   return (
@@ -28,6 +30,11 @@ const NAV = [
 
 export default function PublicLayout() {
   const { user } = useAuth();
+  const { pathname } = useLocation();
+  // ثبت بازدید هر صفحه عمومی برای گزارش «آمار بازدید»
+  useEffect(() => {
+    trackPage(pathname);
+  }, [pathname]);
   const panel = isPanelUser(user);
   return (
     <div className="min-h-dvh pb-20 lg:pb-0">

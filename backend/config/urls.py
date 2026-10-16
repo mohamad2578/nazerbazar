@@ -11,6 +11,7 @@ from apps.analytics import api as analytics
 from apps.cms import api as cms
 from apps.news import api as news
 from apps.suppliers import api as suppliers
+from apps.visits import api as visits
 from apps.complaints import api as complaints
 from apps.core import backup_api
 from apps.distribution import api as distribution
@@ -62,6 +63,8 @@ api = [
     path("public/news/", news.public_news),
     path("public/news/<int:pk>/", news.public_news_detail),
     path("public/suppliers/", suppliers.public_supplier_register),
+    path("public/track/", visits.track),
+    path("analytics/visits/", visits.visits_report),
     path("public/stats/", market.public_stats),
     path("public/products/", market.public_products),
     path("public/products/<int:pk>/", market.public_product_detail),

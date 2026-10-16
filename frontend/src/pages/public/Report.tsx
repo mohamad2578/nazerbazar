@@ -10,7 +10,7 @@ import { toman, toRial } from "../../lib/format";
 import { useCounty, useGeo } from "../../lib/prefs";
 
 const KINDS = [
-  ["overprice", "گران‌فروشی (بیش از نرخ مصوب)"],
+  ["overprice", "گران‌فروشی (بیش از حداکثر قیمت)"],
   ["not_honored", "عدم رعایت قیمت اعلام‌شده در سامانه"],
   ["unavailable", "عدم عرضه با وجود اعلام موجودی"],
   ["weight", "کم‌فروشی"],
@@ -127,7 +127,7 @@ export default function Report() {
               )}
               {selectedOffer && (
                 <p className="mt-2 text-xs text-muted">
-                  قیمت اعلامی این فروشگاه: <b className="text-ink">{toman(selectedOffer.price)}</b> · نرخ مصوب: <b className="text-ink">{toman(selectedOffer.official_price)}</b>
+                  قیمت اعلامی این فروشگاه: <b className="text-ink">{toman(selectedOffer.price)}</b> · حداکثر قیمت: <b className="text-ink">{toman(selectedOffer.official_price)}</b>
                 </p>
               )}
             </div>
@@ -160,7 +160,7 @@ export default function Report() {
             <Field label="نشانی" className="sm:col-span-2">
               <Input value={form.shop_address} onChange={set("shop_address")} />
             </Field>
-            {product.data && <p className="text-xs text-muted sm:col-span-2">کالا: {product.data.name} — نرخ مصوب {toman(product.data.official_price)}</p>}
+            {product.data && <p className="text-xs text-muted sm:col-span-2">کالا: {product.data.name} — حداکثر قیمت {toman(product.data.official_price)}</p>}
           </div>
         )}
 

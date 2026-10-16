@@ -50,7 +50,7 @@ export default function ComplaintDetail() {
             <Info label="کالا" value={c.product_name || "—"} />
             <Info label="اتحادیه / رونوشت" value={`${c.union_name || "—"} / ${c.chamber_name}`} />
             <Info label="قیمت پرداختی" value={<b className="text-danger">{toman(c.paid_price)}</b>} />
-            <Info label="نرخ مصوب لحظه ثبت" value={toman(c.official_price)} />
+            <Info label="حداکثر قیمت لحظه ثبت" value={toman(c.official_price)} />
             <Info label="قیمت اعلامی فروشگاه" value={toman(c.announced_price)} />
             {c.reporter_mobile && <Info label="گزارش‌دهنده" value={<span>{c.reporter_name} · <a href={telLink(c.reporter_mobile)} className="text-brand" dir="ltr">{c.reporter_mobile}</a></span>} />}
             <Info label="شرح" value={<p className="whitespace-pre-line">{c.description}</p>} wide />

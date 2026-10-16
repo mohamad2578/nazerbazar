@@ -50,7 +50,7 @@ def validate_offer_price(product: Product, price: int) -> None:
         )
 
 
-# نقش‌هایی که نرخ مصوبشان بدون تایید اعمال می‌شود (اداره صمت بالادست اتاق اصناف است)
+# نقش‌هایی که حداکثر قیمتشان بدون تایید اعمال می‌شود (اداره صمت بالادست اتاق اصناف است)
 SELF_APPROVING_ROLES = (Role.SAMT, Role.CHAMBER, Role.GOVERNORATE, Role.ADMIN)
 # نقش‌هایی که می‌توانند نرخ در انتظار را تایید یا رد کنند
 PRICE_REVIEWER_ROLES = (Role.CHAMBER, Role.SAMT, Role.GOVERNORATE, Role.ADMIN)
@@ -58,7 +58,7 @@ PRICE_REVIEWER_ROLES = (Role.CHAMBER, Role.SAMT, Role.GOVERNORATE, Role.ADMIN)
 
 @transaction.atomic
 def set_official_price(product: Product, price: int, by: User, max_discount=None, note="") -> OfficialPrice:
-    """ثبت نرخ مصوب.
+    """ثبت حداکثر قیمت.
 
     اگر ثبت‌کننده «اتحادیه» باشد، نرخ در وضعیت «در انتظار تایید» می‌ماند و تا تایید
     اتاق اصناف اعمال نمی‌شود. برای اداره صمت و بالاتر، بی‌درنگ اعمال می‌شود.
@@ -145,7 +145,7 @@ def _apply_price(record: OfficialPrice, product: Product, discount: int) -> None
     product.save(update_fields=["current_price", "max_discount_percent", "price_changed_at", "updated_at"])
 
     if changed:
-        # قیمت اعلامی همه فروشگاه‌ها فورا برابر نرخ مصوب جدید می‌شود تا قیمت قدیمی
+        # قیمت اعلامی همه فروشگاه‌ها فورا برابر حداکثر قیمت جدید می‌شود تا قیمت قدیمی
         # (که ممکن است خارج از بازه مجاز باشد) به مردم نمایش داده نشود. فروشگاه با
         # ورود به داشبورد می‌تواند دوباره تا سقف تخفیف مجاز، قیمت خود را کم کند.
         # confirmed_at عمدا دست‌نخورده می‌ماند تا کالا همچنان «در انتظار به‌روزرسانی»
@@ -225,7 +225,7 @@ def take_daily_snapshot(date=None) -> int:
             ),
         )
         n += 1
-    # کالاهای بدون عرضه هم با نرخ مصوب ثبت شوند تا روند نرخ رسمی کامل باشد
+    # کالاهای بدون عرضه هم با حداکثر قیمت ثبت شوند تا روند نرخ رسمی کامل باشد
     for p in Product.objects.filter(is_active=True, current_price__gt=0).select_related("union__chamber"):
         key = (p.pk, p.union.chamber.county_id)
         if key not in seen:

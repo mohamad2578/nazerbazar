@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
+  Activity, AlertTriangle, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
   Newspaper, Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
@@ -11,12 +11,12 @@ import { useAuth, type Role } from "../lib/auth";
 import { num } from "../lib/format";
 import { Logo } from "./PublicLayout";
 
-type Item = { to: string; label: string; icon: ComponentType<{ className?: string }>; roles: Role[]; end?: boolean; mobile?: boolean };
+type Item = { to: string; label: string; short?: string; icon: ComponentType<{ className?: string }>; roles: Role[]; end?: boolean; mobile?: boolean };
 
 const G: Role[] = ["governorate", "samt"];
 const GC: Role[] = ["governorate", "samt", "chamber"];
 const M: Role[] = ["governorate", "samt", "chamber", "union"];
-// بررسی و بارگذاری نرخ مصوب
+// بررسی و بارگذاری حداکثر قیمت
 const REVIEW: Role[] = ["chamber", "samt", "governorate"];
 const LOAD: Role[] = ["samt", "governorate"];
 
@@ -24,8 +24,8 @@ export const NAV: Item[] = [
   { to: "/panel", label: "داشبورد", icon: Home, roles: [...M, "store"], end: true, mobile: true },
   { to: "/panel/prices", label: "قیمت‌های من", icon: Tags, roles: ["store"], mobile: true },
   { to: "/panel/stores", label: "فروشگاه‌ها", icon: Store, roles: M, mobile: true },
-  { to: "/panel/products", label: "نرخ مصوب کالاهای اساسی", icon: Package, roles: M, mobile: true },
-  { to: "/panel/other-prices", label: "نرخ مصوب سایر کالاها", icon: PackageSearch, roles: M, mobile: true },
+  { to: "/panel/products", label: "حداکثر قیمت کالاهای اساسی", short: "کالای اساسی", icon: Package, roles: M, mobile: true },
+  { to: "/panel/other-prices", label: "حداکثر قیمت سایر کالاها", short: "سایر کالاها", icon: PackageSearch, roles: M, mobile: true },
   { to: "/panel/price-approvals", label: "تایید نرخ‌ها", icon: ClipboardCheck, roles: REVIEW, mobile: true },
   { to: "/panel/price-upload", label: "بارگذاری نرخ‌ها", icon: FileSpreadsheet, roles: LOAD },
   { to: "/panel/orders", label: "سفارش‌ها", icon: ShoppingCart, roles: [...M, "store"], mobile: true },
@@ -40,6 +40,7 @@ export const NAV: Item[] = [
   { to: "/panel/org/counties", label: "شهرستان‌ها", icon: Map, roles: G },
   { to: "/panel/org/chambers", label: "اتاق‌های اصناف", icon: Landmark, roles: G },
   { to: "/panel/org/unions", label: "اتحادیه‌ها", icon: Building2, roles: GC },
+  { to: "/panel/visits", label: "آمار بازدید", icon: Activity, roles: ["samt", "governorate"] },
   { to: "/panel/news", label: "اخبار", icon: Newspaper, roles: ["samt"] },
   { to: "/panel/supplier-list", label: "تامین‌کنندگان", icon: Truck, roles: ["samt", "governorate"] },
   { to: "/panel/org/users", label: "کاربران سازمانی", icon: Users, roles: GC },
@@ -131,7 +132,7 @@ export default function PanelLayout() {
           {mobileItems.map((i) => (
             <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => cx("relative flex flex-col items-center gap-0.5 py-1 text-[11px]", isActive ? "text-brand" : "text-muted")}>
               <i.icon className="size-5" />
-              <span className="max-w-full truncate px-1">{i.label.split(" ")[0]}</span>
+              <span className="max-w-full truncate px-1">{i.short ?? i.label.split(" ")[0]}</span>
               {!!badges[i.to] && <span className="absolute right-1/4 top-0 size-2 rounded-full bg-accent" />}
             </NavLink>
           ))}

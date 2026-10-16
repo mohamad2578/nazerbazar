@@ -76,9 +76,9 @@ function ManagerDashboard() {
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card className="p-4">
           <h2 className="font-semibold">شاخص قیمت (پایه = ۱۰۰)</h2>
-          <p className="mb-2 text-xs text-muted">میانگین تغییر نرخ مصوب و قیمت واقعی فروشگاه‌ها طی ۴۵ روز</p>
+          <p className="mb-2 text-xs text-muted">میانگین تغییر حداکثر قیمت و قیمت واقعی فروشگاه‌ها طی ۴۵ روز</p>
           {trend.data?.series?.length ? (
-            <TrendChart data={trend.data.series} series={[{ key: "official_index", label: "نرخ مصوب" }, { key: "market_index", label: "قیمت فروشگاه‌ها" }]} format={(v) => num(v, 1)} />
+            <TrendChart data={trend.data.series} series={[{ key: "official_index", label: "حداکثر قیمت" }, { key: "market_index", label: "قیمت فروشگاه‌ها" }]} format={(v) => num(v, 1)} />
           ) : <p className="py-10 text-center text-sm text-muted">داده روزانه هنوز ثبت نشده است.</p>}
         </Card>
         <Card className="p-4">
@@ -103,7 +103,7 @@ function ManagerDashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="کل شکایات" value={num(d.complaints.total)} sub={`${num(d.complaints.last_7_days)} در ۷ روز اخیر`} />
         <Stat label="تخلف محرز" value={num(d.complaints.violations)} tone="danger" />
-        <Stat label="میانگین تخفیف فروشگاه‌ها" value={pct(d.offers.avg_discount_percent)} sub="نسبت به نرخ مصوب" />
+        <Stat label="میانگین تخفیف فروشگاه‌ها" value={pct(d.offers.avg_discount_percent)} sub="نسبت به حداکثر قیمت" />
         <Stat label="میانگین امتیاز مشتریان" value={d.rating_avg ? num(d.rating_avg, 1) : "—"} sub="از ۵" />
       </div>
     </div>

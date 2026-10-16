@@ -1048,3 +1048,48 @@ class ChainStoreLoginAndActAsTests(Base):
         r = self.client_for(owner).post("/api/store/offers/", [{"product": self.product.pk, "price": self.product.current_price}], format="json")
         self.assertEqual(r.status_code, 200, r.data)
         self.assertIsNone(OfferLog.objects.filter(offer__store=self.stores[0]).latest("created_at").set_by)
+
+
+class VisitAnalyticsTests(Base):
+    """آمار بازدید: ثبت بازدید صفحه/کالا و گزارش برای مدیریت."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000019", role=Role.SAMT, province=cls.prov)
+
+    def setUp(self):
+        cache.clear()
+
+    def _track(self, visitor, kind="page", path="/", product=None, ua=""):
+        body = {"visitor": visitor, "kind": kind, "path": path}
+        if product:
+            body["product"] = product
+        return APIClient().post("/api/public/track/", body, format="json", HTTP_USER_AGENT=ua)
+
+    def test_tracking_and_report_counts(self):
+        for v in ("a", "a", "b"):
+            self.assertEqual(self._track(v, path="/").status_code, 204)
+        self._track("c", path="/map", ua="Mozilla/5.0 Nazer724App/1.0")
+        self._track("a", kind="product", path=f"/p/{self.product.pk}", product=self.product.pk)
+        self._track("b", kind="product", path=f"/p/{self.product.pk}", product=self.product.pk)
+
+        r = self.client_for(self.samt).get("/api/analytics/visits/")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["page_views"], 4)
+        self.assertEqual(r.data["visitors"], 3)
+        self.assertEqual(r.data["product_views"], 2)
+        self.assertEqual(r.data["platform"], {"web": 3, "app": 1})
+        self.assertEqual(r.data["top_products"][0]["id"], self.product.pk)
+        self.assertEqual(r.data["top_products"][0]["visitors"], 2)
+        self.assertEqual(r.data["granularity"], "day")
+
+    def test_short_range_is_hourly_and_validated(self):
+        c = self.client_for(self.samt)
+        r = c.get("/api/analytics/visits/", {"from": "2026-10-10T00:00", "to": "2026-10-11T00:00"})
+        self.assertEqual(r.data["granularity"], "hour")
+        self.assertEqual(c.get("/api/analytics/visits/", {"from": "2026-10-11", "to": "2026-10-10"}).status_code, 400)
+
+    def test_only_management_sees_the_report_and_visitor_is_required(self):
+        self.assertEqual(self.client_for(self.uni).get("/api/analytics/visits/").status_code, 403)
+        self.assertEqual(APIClient().post("/api/public/track/", {"path": "/"}, format="json").status_code, 400)

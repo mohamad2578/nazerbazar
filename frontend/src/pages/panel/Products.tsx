@@ -30,7 +30,7 @@ export default function Products() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="کالاها و نرخ مصوب"
+        title="کالاها و حداکثر قیمت"
         subtitle={
           user!.role === "union"
             ? "نرخی که ثبت می‌کنید پس از تایید اتاق اصناف اعمال می‌شود."
@@ -61,7 +61,7 @@ export default function Products() {
                   <div className="min-w-0"><div className="truncate font-medium">{p.name}</div><div className="truncate text-xs text-muted">{p.union_name} · {p.unit_display}</div></div>
                 </div>
               ) },
-              { key: "current_price", label: "نرخ مصوب", render: (p) => (
+              { key: "current_price", label: "حداکثر قیمت", render: (p) => (
                 <div>
                   <b className="tabular">{toman(p.current_price)}</b>
                   {p.pending_price && (
@@ -159,7 +159,7 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
         <Field label="دسته"><Select value={String(f.category)} onChange={set("category")}><option value="">—</option>{cats.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
         <Field label="کالای اساسی مرتبط" hint="برای رصدخانه و سبد خانوار"><Select value={String(f.commodity)} onChange={set("commodity")}><option value="">—</option>{coms.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
         <Field label="حداکثر تخفیف مجاز فروشگاه (٪)" error={err.max_discount_percent}><Input type="number" value={f.max_discount_percent} onChange={set("max_discount_percent")} min={0} max={90} dir="ltr" /></Field>
-        {!product && <Field label="نرخ مصوب اولیه"><PriceInput value={f.initial_price} onChange={(v) => setF({ ...f, initial_price: v })} /></Field>}
+        {!product && <Field label="حداکثر قیمت اولیه"><PriceInput value={f.initial_price} onChange={(v) => setF({ ...f, initial_price: v })} /></Field>}
         <Field label="توضیحات" className="sm:col-span-2"><Textarea value={f.description} onChange={set("description")} className="min-h-16" /></Field>
       </div>
       {m.error && !Object.keys(err).length && <p className="mt-3 text-sm text-danger">{(m.error as Error).message}</p>}
@@ -190,9 +190,9 @@ function PriceSheet({ product, onClose }: { product: ProductT; onClose: () => vo
   const newRial = price ? toRial(price) : 0;
   const change = product.current_price && newRial ? ((newRial - product.current_price) / product.current_price) * 100 : 0;
   return (
-    <Sheet open onClose={onClose} title={`نرخ‌گذاری: ${product.name}`} wide footer={<Button className="w-full" loading={m.isPending} disabled={!newRial} onClick={() => m.mutate()}>{needsApproval ? "ارسال برای تایید" : "ثبت نرخ مصوب"}</Button>}>
+    <Sheet open onClose={onClose} title={`نرخ‌گذاری: ${product.name}`} wide footer={<Button className="w-full" loading={m.isPending} disabled={!newRial} onClick={() => m.mutate()}>{needsApproval ? "ارسال برای تایید" : "ثبت حداکثر قیمت"}</Button>}>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="نرخ مصوب جدید" hint={change ? <span className={change > 0 ? "text-danger" : "text-ok"}>{change > 0 ? "افزایش" : "کاهش"} {num(Math.abs(change), 1)}٪</span> : `فعلی: ${toman(product.current_price)}`}>
+        <Field label="حداکثر قیمت جدید" hint={change ? <span className={change > 0 ? "text-danger" : "text-ok"}>{change > 0 ? "افزایش" : "کاهش"} {num(Math.abs(change), 1)}٪</span> : `فعلی: ${toman(product.current_price)}`}>
           <PriceInput value={price} onChange={setPrice} />
         </Field>
         <Field label="حداکثر تخفیف (٪)" hint={newRial ? `حداقل: ${toman(Math.ceil(newRial * (100 - +discount) / 100))}` : undefined}>

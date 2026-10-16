@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "apps.cms",
     "apps.news",
     "apps.suppliers",
+    "apps.visits",
     "apps.accounts",
     "apps.orgs",
     "apps.market",

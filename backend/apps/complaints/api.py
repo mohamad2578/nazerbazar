@@ -121,6 +121,7 @@ def track(request):
 
 class ComplaintViewSet(ScopedModelViewSet):
     """کارتابل شکایات: اتحادیه رسیدگی می‌کند، اتاق اصناف رونوشت دارد و نظارت/ارجاع می‌کند"""
+    union_section = "complaints"
 
     queryset = Complaint.objects.select_related("store", "product", "union", "chamber", "reporter")
     serializer_class = ComplaintSerializer

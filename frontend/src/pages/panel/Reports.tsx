@@ -5,11 +5,21 @@ import { BarsChart, TrendChart } from "../../components/charts";
 import { Badge, Button, Card, DataTable, Loading, PageHeader, Segmented, Select } from "../../components/ui";
 import { api, download, type Page } from "../../lib/api";
 import { num, pct, toman } from "../../lib/format";
+import { useAccess } from "../../lib/settings";
 
 type Tab = "prices" | "complaints" | "unions" | "counties" | "basket" | "distribution";
 
+const TABS: { value: Tab; label: string }[] = [
+  { value: "prices", label: "روند قیمت" }, { value: "complaints", label: "شکایات" }, { value: "unions", label: "عملکرد اتحادیه‌ها" },
+  { value: "counties", label: "شهرستان‌ها" }, { value: "basket", label: "سبد خانوار" }, { value: "distribution", label: "توزیع" },
+];
+
 export default function Reports() {
-  const [tab, setTab] = useState<Tab>("prices");
+  // مدیر کل تعیین می‌کند اداره صمت کدام گزارش‌ها را ببیند
+  const access = useAccess();
+  const allowed = TABS.filter((t) => access.samtReport(t.value));
+  const [picked, setTab] = useState<Tab>("prices");
+  const tab = allowed.some((t) => t.value === picked) ? picked : allowed[0]?.value;
   const [days, setDays] = useState("30");
   return (
     <div className="space-y-4">
@@ -18,10 +28,8 @@ export default function Reports() {
           <option value="7">۷ روز</option><option value="30">۳۰ روز</option><option value="90">۹۰ روز</option><option value="365">یک سال</option>
         </Select>
       } />
-      <Segmented value={tab} onChange={setTab} options={[
-        { value: "prices", label: "روند قیمت" }, { value: "complaints", label: "شکایات" }, { value: "unions", label: "عملکرد اتحادیه‌ها" },
-        { value: "counties", label: "شهرستان‌ها" }, { value: "basket", label: "سبد خانوار" }, { value: "distribution", label: "توزیع" },
-      ]} />
+      {!allowed.length && <Card className="p-6 text-center text-sm text-muted">هیچ گزارشی برای شما فعال نشده است.</Card>}
+      {allowed.length > 0 && <Segmented value={tab!} onChange={setTab} options={allowed} />}
       {tab === "prices" && <PricesTab days={days} />}
       {tab === "complaints" && <ComplaintsTab days={days} />}
       {tab === "unions" && <TableTab url="/analytics/unions/" exportName="unions" columns={[

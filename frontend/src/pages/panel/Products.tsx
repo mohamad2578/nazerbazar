@@ -5,8 +5,9 @@ import ImageUpload from "../../components/ImageUpload";
 import Sparkline from "../../components/Sparkline";
 import { Badge, Button, Card, DataTable, Empty, Field, Input, Loading, PageHeader, PriceInput, Select, Sheet, Textarea, useToast } from "../../components/ui";
 import { api, download, fieldErrors, type Page } from "../../lib/api";
+import { useAccess } from "../../lib/settings";
 import { useAuth } from "../../lib/auth";
-import { ago, dateTime, num, toman, toRial, toToman } from "../../lib/format";
+import { ago, date, dateTime, num, toman, toRial, toToman } from "../../lib/format";
 
 type ProductT = {
   id: number; union: number; union_name: string; category: number | null; category_name: string; commodity: number | null;
@@ -176,7 +177,8 @@ function PriceSheet({ product, onClose }: { product: ProductT; onClose: () => vo
   const [price, setPrice] = useState(String(toToman(product.current_price) || ""));
   const [discount, setDiscount] = useState(String(product.max_discount_percent));
   const [note, setNote] = useState("");
-  const history = useQuery({ queryKey: ["history", product.id], queryFn: () => api.get<{ price: number; previous_price: number; note: string; set_by_name: string; created_at: string }[]>(`/products/${product.id}/history/`) });
+  const { canSetPrices } = useAccess();
+  const history = useQuery({ queryKey: ["history", product.id], queryFn: () => api.get<{ price: number; previous_price: number; note: string; set_by_name: string; set_by_role: string; created_at: string; status: string; status_display: string; reviewed_by_name: string; reviewed_at: string | null }[]>(`/products/${product.id}/history/`) });
   const offers = useQuery({ queryKey: ["p-offers", product.id], queryFn: () => api.get<any[]>(`/products/${product.id}/offers/`) });
   const m = useMutation({
     mutationFn: () => api.post(`/products/${product.id}/set_price/`, { price: toRial(price), max_discount_percent: +discount, note }),
@@ -190,7 +192,9 @@ function PriceSheet({ product, onClose }: { product: ProductT; onClose: () => vo
   const newRial = price ? toRial(price) : 0;
   const change = product.current_price && newRial ? ((newRial - product.current_price) / product.current_price) * 100 : 0;
   return (
-    <Sheet open onClose={onClose} title={`نرخ‌گذاری: ${product.name}`} wide footer={<Button className="w-full" loading={m.isPending} disabled={!newRial} onClick={() => m.mutate()}>{needsApproval ? "ارسال برای تایید" : "ثبت حداکثر قیمت"}</Button>}>
+    <Sheet open onClose={onClose} title={`نرخ‌گذاری: ${product.name}`} wide footer={canSetPrices
+      ? <Button className="w-full" loading={m.isPending} disabled={!newRial} onClick={() => m.mutate()}>{needsApproval ? "ارسال برای تایید" : "ثبت حداکثر قیمت"}</Button>
+      : <p className="w-full rounded-xl bg-warn-soft p-3 text-center text-sm text-warn">ثبت حداکثر قیمت برای اتحادیه‌ها توسط مدیر سامانه غیرفعال شده است.</p>}>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="حداکثر قیمت جدید" hint={change ? <span className={change > 0 ? "text-danger" : "text-ok"}>{change > 0 ? "افزایش" : "کاهش"} {num(Math.abs(change), 1)}٪</span> : `فعلی: ${toman(product.current_price)}`}>
           <PriceInput value={price} onChange={setPrice} />
@@ -219,9 +223,16 @@ function PriceSheet({ product, onClose }: { product: ProductT; onClose: () => vo
           <h3 className="mb-2 text-sm font-semibold">تاریخچه</h3>
           <div className="max-h-56 divide-y divide-line overflow-y-auto text-sm">
             {history.data?.map((h, i) => (
-              <div key={i} className="flex justify-between py-2">
-                <span>{toman(h.price)} {h.note && <span className="text-xs text-muted">· {h.note}</span>}</span>
-                <span className="text-xs text-muted">{dateTime(h.created_at)}</span>
+              <div key={i} className="py-2">
+                <div className="flex justify-between gap-2">
+                  <span>{toman(h.price)} {h.status !== "approved" && <Badge tone={h.status === "pending" ? "warn" : "danger"}>{h.status_display}</Badge>}</span>
+                  <span className="text-xs text-muted tabular">{h.set_by_name ? dateTime(h.created_at) : date(h.created_at)}</span>
+                </div>
+                {h.set_by_name && <div className="text-[11px] text-muted">
+                  ثبت: {h.set_by_name}{h.set_by_role && ` (${h.set_by_role})`}
+                  {h.reviewed_by_name && ` · بررسی: ${h.reviewed_by_name}`}
+                  {h.note && ` · ${h.note}`}
+                </div>}
               </div>
             ))}
           </div>

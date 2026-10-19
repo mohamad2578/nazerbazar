@@ -12,6 +12,7 @@ from apps.cms import api as cms
 from apps.news import api as news
 from apps.suppliers import api as suppliers
 from apps.visits import api as visits
+from apps.core import settings_api
 from apps.complaints import api as complaints
 from apps.core import backup_api
 from apps.distribution import api as distribution
@@ -86,6 +87,8 @@ api = [
     path("public/complaints/track/", complaints.track),
     path("prices/pending/", price_api.pending_prices),
     path("prices/<int:pk>/review/", price_api.review_price),
+    path("prices/log/", price_api.price_log),
+    path("settings/", settings_api.system_settings),
     path("prices/bulk-template/", price_api.bulk_template),
     path("prices/bulk-upload/", price_api.bulk_upload),
     path("analytics/overview/", analytics.overview),

@@ -174,6 +174,7 @@ class ShopPriceReviewViewSet(ScopedModelViewSet):
     کالای اساسی حداکثر قیمت اتحادیه/صمت دارد و در apps.market بررسی می‌شود؛ اینجا قیمت را
     خود فروشگاه آزادانه می‌گذارد و فقط پس از تایید کارشناس صمت به مردم نمایش داده می‌شود.
     """
+    union_section = "other_prices"
 
     queryset = ShopProduct.objects.select_related("store__union__chamber__county", "category", "reviewed_by")
     serializer_class = ShopProductSerializer

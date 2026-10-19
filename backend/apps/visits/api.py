@@ -77,6 +77,9 @@ def _range(request):
 @permission_classes([role_permission("samt", "governorate")])
 def visits_report(request):
     """گزارش بازدید: کل بازدید، بازدیدکننده یکتا، روند زمانی، پربازدیدترین کالاها و ساعات اوج."""
+    from apps.core.models import require_report
+
+    require_report(request.user, "visits")
     start, end = _range(request)
     qs = Visit.objects.filter(created_at__gte=start, created_at__lt=end)
     pages = qs.filter(kind=Visit.Kind.PAGE)

@@ -63,6 +63,10 @@ def set_official_price(product: Product, price: int, by: User, max_discount=None
     اگر ثبت‌کننده «اتحادیه» باشد، نرخ در وضعیت «در انتظار تایید» می‌ماند و تا تایید
     اتاق اصناف اعمال نمی‌شود. برای اداره صمت و بالاتر، بی‌درنگ اعمال می‌شود.
     """
+    from apps.core.models import SystemSettings
+
+    if getattr(by, "role", None) == Role.UNION and not SystemSettings.get().union_can_set_prices:
+        raise ValidationError({"price": "ثبت یا تغییر حداکثر قیمت برای اتحادیه‌ها توسط مدیر سامانه غیرفعال شده است."})
     price = int(price)
     if price <= 0:
         raise ValidationError({"price": "نرخ باید بزرگ‌تر از صفر باشد."})
@@ -150,7 +154,18 @@ def _apply_price(record: OfficialPrice, product: Product, discount: int) -> None
         # ورود به داشبورد می‌تواند دوباره تا سقف تخفیف مجاز، قیمت خود را کم کند.
         # confirmed_at عمدا دست‌نخورده می‌ماند تا کالا همچنان «در انتظار به‌روزرسانی»
         # علامت بخورد و مهلت ۲۴ ساعته برقرار باشد.
-        StoreOffer.objects.filter(product=product).exclude(price=price).update(price=price, updated_at=timezone.now())
+        from apps.core.models import SystemSettings
+
+        now = timezone.now()
+        offers = StoreOffer.objects.filter(product=product)
+        if SystemSettings.get().snap_store_prices:
+            offers.exclude(price=price).update(price=price, updated_at=now)
+        else:
+            # تنظیم مدیر: هر فروشگاه آخرین قیمت خودش را نگه می‌دارد؛ فقط قیمتی که از بازه
+            # مجاز جدید بیرون افتاده به نزدیک‌ترین حد مجاز آورده می‌شود
+            low = product.min_allowed_price
+            offers.filter(price__gt=price).update(price=price, updated_at=now)
+            offers.filter(price__lt=low).update(price=low, updated_at=now)
 
     if changed and previous:
         hours = settings.MARKET["UPDATE_GRACE_HOURS"]

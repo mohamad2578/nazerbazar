@@ -56,12 +56,14 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class OfficialPriceSerializer(serializers.ModelSerializer):
     set_by_name = serializers.CharField(source="set_by.full_name", read_only=True, default="")
+    set_by_role = serializers.CharField(source="set_by.get_role_display", read_only=True, default="")
+    reviewed_by_name = serializers.CharField(source="reviewed_by.full_name", read_only=True, default="")
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
         model = OfficialPrice
-        fields = ["id", "price", "previous_price", "max_discount_percent", "note", "set_by_name", "created_at",
-                  "status", "status_display", "review_note", "reviewed_at"]
+        fields = ["id", "price", "previous_price", "max_discount_percent", "note", "set_by_name", "set_by_role",
+                  "created_at", "status", "status_display", "review_note", "reviewed_at", "reviewed_by_name"]
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -80,6 +82,7 @@ class ProductViewSet(ScopedModelViewSet):
     مدیر کل می‌توانند کالا را برای هر اتحادیه در حوزه خود تعریف کنند و اتحادیهٔ
     یک کالا را هم تغییر دهند.
     """
+    union_section = "products"
 
     serializer_class = ProductSerializer
     read_roles = ("governorate", "samt", "chamber", "union")
@@ -141,7 +144,14 @@ class ProductViewSet(ScopedModelViewSet):
     @action(detail=True)
     def history(self, request, pk=None):
         product = self.get_object()
-        return Response(OfficialPriceSerializer(product.price_history.all()[:100], many=True).data)
+        rows = OfficialPriceSerializer(product.price_history.all()[:100], many=True).data
+        if request.user.role not in ("admin", "samt"):
+            # بقیه نقش‌ها فقط قیمت و تاریخ را می‌بینند، نه اینکه چه کسی و در چه ساعتی تغییر داده
+            for r in rows:
+                r["set_by_name"] = r["set_by_role"] = r["reviewed_by_name"] = ""
+                r["created_at"] = (r["created_at"] or "")[:10]
+                r["reviewed_at"] = None
+        return Response(rows)
 
     @action(detail=True)
     def offers(self, request, pk=None):

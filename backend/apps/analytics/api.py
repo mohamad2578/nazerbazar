@@ -12,6 +12,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.complaints.models import Complaint
+from apps.core.models import require_report
 from apps.core.permissions import role_permission
 from apps.core.scoping import scoped
 from apps.core.utils import percent_change
@@ -102,6 +103,7 @@ def overview(request):
 @permission_classes([PANEL])
 def trends(request):
     """روند قیمت: برای یک کالا (مصوب/میانگین/کمینه/بیشینه بازار) یا شاخص کل (پایه=۱۰۰)"""
+    require_report(request.user, "prices")
     days = _days(request)
     since = timezone.localdate() - timedelta(days=days)
     snaps = S(DailySnapshot.objects.filter(date__gte=since), request)
@@ -140,6 +142,7 @@ def trends(request):
 @permission_classes([PANEL])
 def price_changes(request):
     """بیشترین تغییرات حداکثر قیمت در بازه (Top movers)"""
+    require_report(request.user, "prices")
     days = _days(request)
     qs = S(OfficialPrice.objects.filter(created_at__gte=timezone.now() - timedelta(days=days), previous_price__gt=0), request)
     rows = [
@@ -155,6 +158,7 @@ def price_changes(request):
 @api_view(["GET"])
 @permission_classes([PANEL])
 def complaints_report(request):
+    require_report(request.user, "complaints")
     days = _days(request, 90)
     since = timezone.now() - timedelta(days=days)
     qs = S(Complaint.objects.filter(created_at__gte=since), request)
@@ -213,6 +217,7 @@ def _union_rows(request):
 @api_view(["GET"])
 @permission_classes([MANAGERS])
 def unions_report(request):
+    require_report(request.user, "unions")
     return Response(_union_rows(request))
 
 
@@ -243,6 +248,7 @@ def _county_rows(request):
 @api_view(["GET"])
 @permission_classes([MANAGERS])
 def counties_report(request):
+    require_report(request.user, "counties")
     return Response(_county_rows(request))
 
 
@@ -250,6 +256,7 @@ def counties_report(request):
 @permission_classes([PANEL])
 def basket_report(request):
     """هزینه سبد خانوار: وضعیت فعلی و روند (بر اساس snapshot روزانه)"""
+    require_report(request.user, "basket")
     days = _days(request, 90)
     county = request.query_params.get("county")
     counties = [int(county)] if county else list(S(County.objects.all(), request).values_list("pk", flat=True)) \
@@ -266,6 +273,7 @@ def basket_report(request):
 @api_view(["GET"])
 @permission_classes([MANAGERS])
 def distribution_report(request):
+    require_report(request.user, "distribution")
     allocs = S(Allocation.objects.select_related("commodity"), request).distinct()
     rows = []
     for a in allocs:
@@ -339,6 +347,8 @@ def export(request, name):
 
     if name not in EXPORTS:
         raise ValidationError({"detail": "گزارش نامعتبر است."})
+    if name in ("unions", "counties", "prices", "complaints"):
+        require_report(request.user, name)
     title, fn, cols = EXPORTS[name]
     wb = Workbook()
     ws = wb.active

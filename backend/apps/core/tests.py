@@ -1150,3 +1150,85 @@ class SpecialOfferTests(Base):
             self.client_for(self.samt).post(f"/api/other-prices/{pid}/approve/")
         ids = [r["id"] for r in self.client.get("/api/public/special-offers/").data["results"]]
         self.assertEqual(ids, [b, a])
+
+
+class SystemSettingsTests(Base):
+    """تنظیمات مدیر کل: ثبت قیمت اتحادیه، رفتار قیمت فروشگاه‌ها، بخش‌های اتحادیه، گزارش‌های صمت و سابقه قیمت."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000021", role=Role.SAMT, province=cls.prov)
+
+    def setUp(self):
+        cache.clear()
+
+    def _set(self, **data):
+        r = self.client_for(self.admin).patch("/api/settings/", data, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        return r.data
+
+    def test_only_admin_changes_settings(self):
+        self.assertEqual(self.client_for(self.samt).patch("/api/settings/", {"snap_store_prices": False}, format="json").status_code, 403)
+        self.assertEqual(self.client_for(self.uni).get("/api/settings/").status_code, 200)
+
+    def test_admin_can_stop_unions_from_setting_prices(self):
+        url = f"/api/products/{self.product.pk}/set_price/"
+        self.assertEqual(self.client_for(self.uni).post(url, {"price": self.product.current_price + 10_000}, format="json").status_code, 200)
+        self._set(union_can_set_prices=False)
+        r = self.client_for(self.uni).post(url, {"price": self.product.current_price + 20_000}, format="json")
+        self.assertEqual(r.status_code, 400)
+        # اداره صمت همچنان می‌تواند
+        self.assertEqual(self.client_for(self.samt).post(url, {"price": self.product.current_price + 20_000}, format="json").status_code, 200)
+
+    def test_keep_store_prices_when_snap_is_off(self):
+        from apps.market.services import set_official_price
+
+        offer = upsert_offer(self.stores[0], self.product, self.product.current_price - 1000, True)
+        kept = offer.price
+        self._set(snap_store_prices=False)
+        set_official_price(self.product, self.product.current_price + 100_000, self.samt)
+        offer.refresh_from_db()
+        self.assertEqual(offer.price, kept)          # هنوز در بازه مجاز جدید است، پس دست‌نخورده می‌ماند
+        set_official_price(self.product, kept - 50_000, self.samt)
+        offer.refresh_from_db()
+        self.assertEqual(offer.price, kept - 50_000)  # بالاتر از سقف جدید بود، به سقف آورده شد
+        self._set(snap_store_prices=True)
+        set_official_price(self.product, kept - 40_000, self.samt)
+        offer.refresh_from_db()
+        self.assertEqual(offer.price, kept - 40_000)  # حالت پیش‌فرض: برابر حداکثر قیمت
+
+    def test_union_sections_are_enforced_on_the_server(self):
+        self.assertEqual(self.client_for(self.uni).get("/api/stores/").status_code, 200)
+        self._set(union_sections=["products"])
+        self.assertEqual(self.client_for(self.uni).get("/api/stores/").status_code, 403)
+        self.assertEqual(self.client_for(self.uni).get("/api/products/").status_code, 200)
+        self.assertEqual(self.client_for(self.uni).get("/api/prices/log/").status_code, 403)
+        # بقیه نقش‌ها تحت تاثیر نیستند
+        self.assertEqual(self.client_for(self.cham).get("/api/stores/").status_code, 200)
+
+    def test_admin_limits_which_reports_samt_sees(self):
+        c = self.client_for(self.samt)
+        self.assertEqual(c.get("/api/analytics/complaints/").status_code, 200)
+        self._set(samt_reports=["prices"])
+        self.assertEqual(c.get("/api/analytics/complaints/").status_code, 403)
+        self.assertEqual(c.get("/api/analytics/visits/").status_code, 403)
+        self.assertEqual(c.get("/api/analytics/price-changes/").status_code, 200)
+        # استانداری محدود نمی‌شود
+        self.assertEqual(self.client_for(self.gov).get("/api/analytics/complaints/").status_code, 200)
+
+    def test_price_log_shows_who_and_when(self):
+        from apps.market.services import set_official_price
+
+        set_official_price(self.product, self.product.current_price + 30_000, self.samt, note="افزایش")
+        # فقط مدیر کل و صمت؛ اتحادیه، اتاق اصناف و استانداری دسترسی ندارند
+        for other in (self.uni, self.cham, self.gov):
+            self.assertEqual(self.client_for(other).get("/api/prices/log/").status_code, 403)
+        hist = self.client_for(self.uni).get(f"/api/products/{self.product.pk}/history/").data
+        self.assertEqual(hist[0]["set_by_name"], "")
+        rows = self.client_for(self.samt).get("/api/prices/log/", {"product": self.product.pk}).data["results"]
+        latest = rows[0]
+        self.assertEqual(latest["set_by_mobile"], self.samt.mobile)
+        self.assertEqual(latest["set_by_role"], "اداره صمت")
+        self.assertTrue(latest["created_at"])
+        self.assertEqual(latest["note"], "افزایش")

@@ -47,6 +47,7 @@ class OrderSerializer(serializers.ModelSerializer):
 
 class OrderViewSet(ScopedModelViewSet):
     """کارتابل سفارش‌های فروشگاه (و مشاهده برای سطوح نظارتی)."""
+    union_section = "orders"
 
     queryset = Order.objects.select_related("store").prefetch_related("items", "events")
     serializer_class = OrderSerializer

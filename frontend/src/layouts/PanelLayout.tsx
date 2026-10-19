@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, AlertTriangle, BadgePercent, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
+  Activity, AlertTriangle, History, SlidersHorizontal, BadgePercent, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
   Newspaper, Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
@@ -8,10 +8,17 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import { cx } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth, type Role } from "../lib/auth";
+import { useAccess } from "../lib/settings";
 import { num } from "../lib/format";
 import { Logo } from "./PublicLayout";
 
-type Item = { to: string; label: string; short?: string; icon: ComponentType<{ className?: string }>; roles: Role[]; end?: boolean; mobile?: boolean };
+type Item = {
+  to: string; label: string; short?: string; icon: ComponentType<{ className?: string }>; roles: Role[]; end?: boolean; mobile?: boolean;
+  /** کلید بخش در تنظیمات «بخش‌های در دسترس اتحادیه» */
+  section?: string;
+  /** کلید(های) گزارش در تنظیمات «گزارش‌های اداره صمت»؛ اگر هیچ‌کدام مجاز نباشد منو پنهان می‌شود */
+  reports?: string[];
+};
 
 const G: Role[] = ["governorate", "samt"];
 const GC: Role[] = ["governorate", "samt", "chamber"];
@@ -23,25 +30,26 @@ const LOAD: Role[] = ["samt", "governorate"];
 export const NAV: Item[] = [
   { to: "/panel", label: "داشبورد", icon: Home, roles: [...M, "store"], end: true, mobile: true },
   { to: "/panel/prices", label: "قیمت‌های من", icon: Tags, roles: ["store"], mobile: true },
-  { to: "/panel/stores", label: "فروشگاه‌ها", icon: Store, roles: M, mobile: true },
-  { to: "/panel/products", label: "حداکثر قیمت کالاهای اساسی", short: "کالای اساسی", icon: Package, roles: M, mobile: true },
-  { to: "/panel/other-prices", label: "حداکثر قیمت سایر کالاها", short: "سایر کالاها", icon: PackageSearch, roles: M, mobile: true },
+  { to: "/panel/stores", label: "فروشگاه‌ها", icon: Store, roles: M, mobile: true, section: "stores" },
+  { to: "/panel/products", label: "حداکثر قیمت کالاهای اساسی", short: "کالای اساسی", icon: Package, roles: M, mobile: true, section: "products" },
+  { to: "/panel/other-prices", label: "حداکثر قیمت سایر کالاها", short: "سایر کالاها", icon: PackageSearch, roles: M, mobile: true, section: "other_prices" },
   { to: "/panel/price-approvals", label: "تایید نرخ‌ها", icon: ClipboardCheck, roles: REVIEW, mobile: true },
   { to: "/panel/price-upload", label: "بارگذاری نرخ‌ها", icon: FileSpreadsheet, roles: LOAD },
-  { to: "/panel/orders", label: "سفارش‌ها", icon: ShoppingCart, roles: [...M, "store"], mobile: true },
+  { to: "/panel/price-log", label: "سابقه حداکثر قیمت‌ها", icon: History, roles: ["samt"] },
+  { to: "/panel/orders", label: "سفارش‌ها", icon: ShoppingCart, roles: [...M, "store"], mobile: true, section: "orders" },
   { to: "/panel/my-shop", label: "فروشگاه اینترنتی من", icon: ShoppingBag, roles: ["store"], mobile: true },
   { to: "/panel/specials", label: "تخفیفات ویژه", short: "تخفیفات", icon: BadgePercent, roles: ["store"], mobile: true },
-  { to: "/panel/complaints", label: "شکایات", icon: MessageSquareWarning, roles: [...M, "store"], mobile: true },
-  { to: "/panel/quotas", label: "سهمیه‌ها", icon: Truck, roles: ["union", "store"] },
-  { to: "/panel/allocations", label: "تخصیص و توزیع", icon: Boxes, roles: M },
-  { to: "/panel/alerts", label: "هشدارها", icon: AlertTriangle, roles: M },
-  { to: "/panel/reports", label: "گزارش‌های تحلیلی", icon: BarChart3, roles: M },
-  { to: "/panel/observatory", label: "رصدخانه کالای اساسی", icon: Globe2, roles: M },
+  { to: "/panel/complaints", label: "شکایات", icon: MessageSquareWarning, roles: [...M, "store"], mobile: true, section: "complaints" },
+  { to: "/panel/quotas", label: "سهمیه‌ها", icon: Truck, roles: ["union", "store"], section: "quotas" },
+  { to: "/panel/allocations", label: "تخصیص و توزیع", icon: Boxes, roles: M, section: "quotas" },
+  { to: "/panel/alerts", label: "هشدارها", icon: AlertTriangle, roles: M, section: "alerts" },
+  { to: "/panel/reports", label: "گزارش‌های تحلیلی", icon: BarChart3, roles: M, section: "reports", reports: ["prices", "complaints", "unions", "counties", "basket", "distribution"] },
+  { to: "/panel/observatory", label: "رصدخانه کالای اساسی", icon: Globe2, roles: M, section: "observatory" },
   { to: "/panel/org/provinces", label: "استان‌ها", icon: Map, roles: [] },
   { to: "/panel/org/counties", label: "شهرستان‌ها", icon: Map, roles: G },
   { to: "/panel/org/chambers", label: "اتاق‌های اصناف", icon: Landmark, roles: G },
   { to: "/panel/org/unions", label: "اتحادیه‌ها", icon: Building2, roles: GC },
-  { to: "/panel/visits", label: "آمار بازدید", icon: Activity, roles: ["samt", "governorate"] },
+  { to: "/panel/visits", label: "آمار بازدید", icon: Activity, roles: ["samt", "governorate"], reports: ["visits"] },
   { to: "/panel/news", label: "اخبار", icon: Newspaper, roles: ["samt"] },
   { to: "/panel/supplier-list", label: "تامین‌کنندگان", icon: Truck, roles: ["samt", "governorate"] },
   { to: "/panel/org/users", label: "کاربران سازمانی", icon: Users, roles: GC },
@@ -49,6 +57,7 @@ export const NAV: Item[] = [
   { to: "/panel/org/categories", label: "دسته‌بندی‌ها", icon: Settings2, roles: [] },
   { to: "/panel/slides", label: "اسلایدهای صفحه اصلی", icon: GalleryHorizontal, roles: [] },
   { to: "/panel/backup", label: "پشتیبان‌گیری و بازیابی", icon: DatabaseBackup, roles: [] },
+  { to: "/panel/settings", label: "تنظیمات سامانه", icon: SlidersHorizontal, roles: [] },
   { to: "/panel/profile", label: "مشخصات فروشگاه", icon: Settings2, roles: ["store"] },
 ];
 
@@ -58,12 +67,17 @@ export default function PanelLayout() {
   const loc = useLocation();
   const nav = useNavigate();
   const role = user!.role;
-  const items = NAV.filter((i) => role === "admin" || i.roles.includes(role));
+  const access = useAccess();
+  const items = NAV.filter((i) =>
+    (role === "admin" || i.roles.includes(role)) &&
+    (!i.section || access.unionSection(i.section)) &&
+    (!i.reports || i.reports.some(access.samtReport)),
+  );
   const notif = useQuery({ queryKey: ["notifications-count"], queryFn: () => api.get<{ unread: number }>("/notifications/", { is_read: false, page_size: 1 }), refetchInterval: 60_000 });
   const pendingStores = useQuery({
     queryKey: ["pending-stores"],
     queryFn: () => api.get<{ count: number }>("/stores/", { status: "pending", page_size: 1 }),
-    enabled: role === "union" || role === "admin",
+    enabled: role === "admin" || (role === "union" && access.unionSection("stores")),
     refetchInterval: 120_000,
   });
   const badges: Record<string, number | undefined> = { "/panel/stores": pendingStores.data?.count };

@@ -195,3 +195,56 @@ def bulk_upload(request):
         "skipped": skipped,
         "applied": applied,
     })
+
+
+# ─────────────────── سابقه حداکثر قیمت‌ها (چه کسی، چه زمانی) ───────────────────
+
+# فقط مدیر کل و اداره صمت می‌بینند چه کسی و چه ساعتی قیمت را ثبت یا تغییر داده است
+PriceLogViewers = role_permission("samt")
+
+
+class PriceLogSerializer(PendingPriceSerializer):
+    """یک ردیف از سابقه: ثبت‌کننده و نقشش، زمان ثبت، و بررسی‌کننده و زمان تایید/رد."""
+
+    set_by_role = serializers.CharField(source="set_by.get_role_display", read_only=True, default="")
+    set_by_mobile = serializers.CharField(source="set_by.mobile", read_only=True, default="")
+    reviewed_by_name = serializers.CharField(source="reviewed_by.full_name", read_only=True, default="")
+    reviewed_by_role = serializers.CharField(source="reviewed_by.get_role_display", read_only=True, default="")
+
+    class Meta(PendingPriceSerializer.Meta):
+        fields = PendingPriceSerializer.Meta.fields + [
+            "set_by_role", "set_by_mobile", "reviewed_by_name", "reviewed_by_role",
+        ]
+
+
+@api_view(["GET"])
+@permission_classes([PriceLogViewers])
+def price_log(request):
+    """همه ثبت‌ها و تغییرات حداکثر قیمت در حوزه کاربر، جدیدترین اول؛ با فیلتر کالا، اتحادیه، نقش، وضعیت و تاریخ."""
+    from datetime import datetime
+
+    qs = scoped(
+        OfficialPrice.objects.select_related("product__union__chamber__county", "set_by", "reviewed_by"),
+        request.user, OfficialPrice.SCOPE,
+    ).order_by("-created_at")
+    p = request.query_params
+    if p.get("product"):
+        qs = qs.filter(product_id=p["product"])
+    if p.get("union"):
+        qs = qs.filter(product__union_id=p["union"])
+    if p.get("status"):
+        qs = qs.filter(status=p["status"])
+    if p.get("role"):
+        qs = qs.filter(set_by__role=p["role"])
+    if p.get("q"):
+        qs = qs.filter(product__name__icontains=p["q"])
+    for name, lookup in (("from", "created_at__gte"), ("to", "created_at__lt")):
+        if p.get(name):
+            try:
+                dt = datetime.fromisoformat(p[name])
+            except ValueError:
+                raise ValidationError({name: "تاریخ نامعتبر است."})
+            qs = qs.filter(**{lookup: timezone.make_aware(dt) if timezone.is_naive(dt) else dt})
+    paginator = Pagination()
+    page = paginator.paginate_queryset(qs, request)
+    return paginator.get_paginated_response(PriceLogSerializer(page, many=True).data)

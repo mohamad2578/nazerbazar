@@ -98,6 +98,7 @@ class AllocationSerializer(serializers.ModelSerializer):
 
 
 class AllocationViewSet(ScopedModelViewSet):
+    union_section = "quotas"
     queryset = Allocation.objects.select_related("commodity", "province").prefetch_related("shares__union")
     serializer_class = AllocationSerializer
     read_roles = ("governorate", "samt", "chamber", "union")
@@ -126,6 +127,7 @@ class AllocationViewSet(ScopedModelViewSet):
 
 class ShareViewSet(ScopedModelViewSet):
     """سهم اتحادیه از تخصیص و تقسیم آن بین فروشگاه‌ها"""
+    union_section = "quotas"
 
     queryset = AllocationShare.objects.select_related("allocation__commodity", "union")
     serializer_class = ShareSerializer
@@ -155,6 +157,7 @@ class ShareViewSet(ScopedModelViewSet):
 
 
 class QuotaViewSet(ScopedModelViewSet):
+    union_section = "quotas"
     queryset = Quota.objects.select_related("store", "share__allocation__commodity").prefetch_related("events")
     serializer_class = QuotaSerializer
     read_roles = ("governorate", "samt", "chamber", "union", "store")

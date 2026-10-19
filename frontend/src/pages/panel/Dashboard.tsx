@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { TrendChart } from "../../components/charts";
 import { Badge, Card, Loading, PageHeader, Stat, STATUS_TONE } from "../../components/ui";
 import { api } from "../../lib/api";
+import { useAccess } from "../../lib/settings";
 import { useAuth } from "../../lib/auth";
 import { ago, hoursLeft, num, pct } from "../../lib/format";
 
@@ -58,6 +59,7 @@ function StoreDashboard() {
 }
 
 function ManagerDashboard() {
+  const access = useAccess();
   const { user } = useAuth();
   const ov = useQuery({ queryKey: ["overview"], queryFn: () => api.get("/analytics/overview/") });
   const trend = useQuery({ queryKey: ["trend-index"], queryFn: () => api.get("/analytics/trends/", { days: 45 }) });
@@ -68,7 +70,7 @@ function ManagerDashboard() {
     <div className="space-y-5">
       <PageHeader title="داشبورد" subtitle={`${user!.role_display}${user!.scope_name ? ` · ${user!.scope_name}` : ""}`} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="فروشگاه فعال" value={num(d.stores.active)} sub={<Link to="/panel/stores?status=pending" className="text-warn">{num(d.stores.pending)} در انتظار تایید</Link>} icon={<Store className="size-4" />} />
+        <Stat label="فروشگاه فعال" value={num(d.stores.active)} sub={access.unionSection("stores") ? <Link to="/panel/stores?status=pending" className="text-warn">{num(d.stores.pending)} در انتظار تایید</Link> : `${num(d.stores.pending)} در انتظار تایید`} icon={<Store className="size-4" />} />
         <Stat label="کالای نرخ‌گذاری‌شده" value={num(d.products.priced)} sub={`${num(d.price_changes.last_7_days)} تغییر نرخ در ۷ روز`} icon={<Package className="size-4" />} />
         <Stat label="انطباق قیمت فروشگاه‌ها" value={pct(d.offers.compliance_percent)} sub={`${num(d.offers.hidden_stale)} قیمت به‌روزنشده (پنهان)`} icon={<ShieldCheck className="size-4" />} tone={d.offers.compliance_percent >= 90 ? "ok" : "warn"} />
         <Stat label="شکایات باز" value={num(d.complaints.open)} sub={`میانگین رسیدگی ${d.complaints.avg_resolution_hours != null ? num(d.complaints.avg_resolution_hours, 1) + " ساعت" : "—"}`} icon={<MessageSquareWarning className="size-4" />} tone={d.complaints.open ? "danger" : "ok"} />

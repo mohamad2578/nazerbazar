@@ -58,6 +58,7 @@ class CommodityViewSet(viewsets.ModelViewSet):
 
 class CommodityReportViewSet(ScopedModelViewSet):
     """ورود داده جدول‌های الف و ب (نیاز/تامین/قیمت زنجیره) — استانداری و مدیر کل"""
+    union_section = "observatory"
 
     queryset = CommodityReport.objects.select_related("commodity", "province")
     serializer_class = CommodityReportSerializer
@@ -81,6 +82,7 @@ class CommodityReportViewSet(ScopedModelViewSet):
 
 
 class AlertViewSet(ScopedModelViewSet):
+    union_section = "alerts"
     queryset = Alert.objects.select_related("county", "product", "store")
     serializer_class = AlertSerializer
     read_roles = ("governorate", "samt", "chamber", "union")

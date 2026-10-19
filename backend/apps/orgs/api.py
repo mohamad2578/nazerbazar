@@ -175,6 +175,7 @@ class UnionViewSet(ScopedModelViewSet):
 
 class StoreViewSet(ScopedModelViewSet):
     """کارتابل فروشگاه‌ها؛ تایید/رد/تعلیق توسط اتحادیه، اتاق اصناف، استانداری یا مدیر کل."""
+    union_section = "stores"
 
     queryset = Store.objects.select_related("union__chamber__county", "owner")
     serializer_class = StoreSerializer

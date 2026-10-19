@@ -17,6 +17,13 @@ class ScopedPermission(BasePermission):
             return False
         if u.role == "admin":
             return True
+        # مدیر کل می‌تواند بخش‌هایی از پنل را برای اتحادیه‌ها ببندد
+        section = getattr(view, "union_section", None)
+        if u.role == "union" and section:
+            from .models import SystemSettings
+
+            if not SystemSettings.get().union_allows(section):
+                return False
         roles = view.read_roles if request.method in SAFE_METHODS else view.write_roles
         action_roles = getattr(view, "action_roles", {}).get(getattr(view, "action", None))
         return u.role in (action_roles or roles)

@@ -77,21 +77,20 @@ class PriceRulesTests(Base):
         with self.assertRaises(Exception):
             upsert_offer(self.stores[1], foreign, 100)
 
-    def test_24h_grace_then_hidden_until_updated(self):
+    def test_stale_offer_is_never_hidden_after_24_hours(self):
+        """قاعده حذف پس از ۲۴ ساعت برداشته شده: قیمت اعلامی قبلی باقی می‌ماند و نمایش داده می‌شود."""
         s = self.stores[0]
         offer = upsert_offer(s, self.product, 900_000)
         set_official_price(self.product, 1_200_000, self.cham)
-        # در مهلت: هنوز نمایش داده می‌شود ولی علامت «در انتظار به‌روزرسانی» دارد
         self.assertIn(offer.pk, visible_offers().values_list("pk", flat=True))
         offer.refresh_from_db()
         self.assertTrue(offer.is_stale)
-        # پس از ۲۴ ساعت: پنهان
         Product.objects.filter(pk=self.product.pk).update(price_changed_at=timezone.now() - timedelta(hours=25))
         StoreOffer.objects.filter(pk=offer.pk).update(confirmed_at=timezone.now() - timedelta(hours=26))
-        self.assertNotIn(offer.pk, visible_offers().values_list("pk", flat=True))
-        # با به‌روزرسانی دوباره نمایش داده می‌شود
-        upsert_offer(s, self.product, 1_100_000)
         self.assertIn(offer.pk, visible_offers().values_list("pk", flat=True))
+        # ناموجود شدن توسط خود فروشگاه همچنان از فهرست خارج می‌کند
+        StoreOffer.objects.filter(pk=offer.pk).update(is_available=False)
+        self.assertNotIn(offer.pk, visible_offers().values_list("pk", flat=True))
 
     def test_same_price_does_not_reset_deadline(self):
         offer = upsert_offer(self.stores[0], self.product, 900_000)
@@ -105,7 +104,7 @@ class PriceRulesTests(Base):
     def test_store_notified_on_price_change(self):
         upsert_offer(self.stores[0], self.product, 900_000)
         set_official_price(self.product, 1_100_000, self.cham)
-        self.assertTrue(self.stores[0].owner.notifications.filter(title__contains="تغییر نرخ").exists())
+        self.assertTrue(self.stores[0].owner.notifications.filter(title__contains="تغییر حداکثر قیمت").exists())
 
 
 class PublicApiTests(Base):
@@ -344,7 +343,14 @@ class StoreLocationTests(Base):
 
 
 class PriceSnapTests(Base):
-    """با تغییر نرخ مصوب، قیمت اعلامی فروشگاه‌ها فورا برابر نرخ جدید می‌شود."""
+    """اگر مدیر «هم‌ترازی قیمت فروشگاه‌ها» را روشن کند، با تغییر حداکثر قیمت قیمت همه برابر آن می‌شود."""
+
+    def setUp(self):
+        from apps.core.models import SystemSettings
+
+        s = SystemSettings.get()
+        s.snap_store_prices = True
+        s.save()
 
     def test_offers_snap_to_new_official_price(self):
         s0, s1 = self.stores[0], self.stores[1]
@@ -1232,3 +1238,79 @@ class SystemSettingsTests(Base):
         self.assertEqual(latest["set_by_role"], "اداره صمت")
         self.assertTrue(latest["created_at"])
         self.assertEqual(latest["note"], "افزایش")
+
+
+class PriceChangeSmsTests(Base):
+    """پیامک تغییر حداکثر قیمت به فروشگاه‌هایی که قیمت و موجودی اعلام کرده‌اند."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.samt = User.objects.create_user("09120000022", role=Role.SAMT, province=cls.prov)
+
+    def test_default_keeps_the_stores_previous_price(self):
+        offer = upsert_offer(self.stores[0], self.product, self.product.current_price - 1000)
+        kept = offer.price
+        set_official_price(self.product, self.product.current_price + 50_000, self.samt)
+        offer.refresh_from_db()
+        self.assertEqual(offer.price, kept)
+
+    def test_only_stores_with_an_available_price_get_the_sms(self):
+        from unittest import mock
+
+        with_price = upsert_offer(self.stores[0], self.product, self.product.current_price - 1000)
+        unavailable = upsert_offer(self.stores[1], self.product, self.product.current_price - 1000, is_available=False)
+        no_price = self.stores[2]
+        with mock.patch("apps.core.sms.send_price_change_sms") as sms:
+            set_official_price(self.product, 650_000, self.samt)
+        called = {c.args[0] for c in sms.call_args_list}
+        self.assertEqual(called, {with_price.store.owner.mobile})
+        self.assertNotIn(unavailable.store.owner.mobile, called)
+        self.assertNotIn(no_price.owner.mobile, called)
+        args = sms.call_args.args
+        self.assertEqual((args[1], args[2], args[3]), (with_price.store.name, self.product.name, 65_000))
+
+    def test_same_price_sends_nothing_and_admin_can_switch_it_off(self):
+        from unittest import mock
+
+        from apps.core.models import SystemSettings
+
+        upsert_offer(self.stores[0], self.product, self.product.current_price - 1000)
+        with mock.patch("apps.core.sms.send_price_change_sms") as sms:
+            set_official_price(self.product, self.product.current_price, self.samt)
+        sms.assert_not_called()
+        s = SystemSettings.get()
+        s.sms_on_price_change = False
+        s.save()
+        with mock.patch("apps.core.sms.send_price_change_sms") as sms:
+            set_official_price(self.product, self.product.current_price + 10_000, self.samt)
+        sms.assert_not_called()
+
+    def test_message_text_and_ghasedak_driver(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from apps.core import sms
+        from apps.core.models import SmsLog
+
+        text = sms.PRICE_CHANGE_TEXT.format(store="فروشگاه شهروند جولان", product="سیب زمینی", price="65,000")
+        for part in ("فروشگاه شهروند جولان", "سیب زمینی", "65,000 تومان", "۲۴ ساعت", "مسئولیت آن بر عهده"):
+            self.assertIn(part, text)
+        with override_settings(SMS_BACKEND="ghasedak", GHASEDAK_API_KEY="key", GHASEDAK_LINE="3000"):
+            with mock.patch("apps.core.sms._post", return_value={"result": {"code": 200}}) as post:
+                self.assertTrue(sms.send_text("09123456789", text, "price_change"))
+            url, data, headers = post.call_args.args
+            self.assertTrue(url.endswith("/sms/send/simple"))
+            self.assertEqual((data["receptor"], data["linenumber"], headers["apikey"]), ("09123456789", "3000", "key"))
+            with mock.patch("apps.core.sms._post", side_effect=OSError("timeout")):
+                self.assertFalse(sms.send_text("09123456789", text, "price_change"))
+        self.assertEqual(list(SmsLog.objects.order_by("id").values_list("ok", flat=True)), [True, False])
+
+    def test_only_admin_reads_the_sms_log(self):
+        from apps.core.models import SmsLog
+
+        SmsLog.objects.create(kind="price_change", mobile="09123456789", text="x", ok=False, detail="err")
+        self.assertEqual(self.client_for(self.samt).get("/api/sms-log/").status_code, 403)
+        r = self.client_for(self.admin).get("/api/sms-log/", {"ok": "false"})
+        self.assertEqual((r.status_code, r.data["failed"], len(r.data["results"])), (200, 1, 1))

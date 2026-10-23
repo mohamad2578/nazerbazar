@@ -149,6 +149,7 @@ class StoreOffer(TimeStamped):
 
     @property
     def is_stale(self) -> bool:
+        """فروشگاه از آخرین تغییر حداکثر قیمت هنوز قیمتش را تایید یا اصلاح نکرده است."""
         p = self.product
         return bool(p.price_changed_at and self.confirmed_at < p.price_changed_at)
 

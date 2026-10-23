@@ -219,7 +219,7 @@ def store_catalog(request):
             "offer_price": o.price if o else None, "is_available": o.is_available if o else None,
             "confirmed_at": o.confirmed_at if o else None, "is_stale": stale,
             "deadline": (p.price_changed_at + grace) if stale else None,
-            "hidden": bool(stale and p.price_changed_at + grace < now),
+            "hidden": False,  # دیگر هیچ کالایی به‌خاطر به‌روز نکردن قیمت پنهان نمی‌شود
         })
     return Response({
         "store": {"id": store.pk, "name": store.name, "status": store.status,
@@ -316,7 +316,6 @@ def _offer_row(o, request, lat=None, lng=None, now=None, shop_counts=None):
     s = o.store
     row = {
         "id": o.pk, "price": o.price, "discount_percent": o.discount_percent, "confirmed_at": o.confirmed_at,
-        "pending_update": o.is_stale,  # در مهلت ۲۴ ساعته هنوز به‌روز نشده
         "store": {
             "id": s.pk, "name": s.name, "address": s.address, "phone": s.phone, "lat": s.lat, "lng": s.lng,
             "working_hours": s.working_hours, "is_verified": s.is_verified,
@@ -406,8 +405,7 @@ def public_store_detail(request, pk):
         "photo": request.build_absolute_uri(s.photo.url) if s.photo else None,
         "offers": [
             {"product": o.product_id, "name": o.product.name, "unit_display": o.product.get_unit_display(),
-             "price": o.price, "official_price": o.product.current_price, "discount_percent": o.discount_percent,
-             "pending_update": o.is_stale}
+             "price": o.price, "official_price": o.product.current_price, "discount_percent": o.discount_percent}
             for o in offers
         ],
         "reviews": ReviewSerializer(s.reviews.filter(is_visible=True).select_related("user")[:30], many=True).data,

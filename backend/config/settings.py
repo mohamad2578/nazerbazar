@@ -146,8 +146,12 @@ MARKET = {
 }
 
 # ─── پیامک ─────────────────────────────────────────────────
-SMS_BACKEND = env("SMS_BACKEND", "console")  # console | kavenegar
+SMS_BACKEND = env("SMS_BACKEND", "console")  # console | ghasedak | kavenegar
 KAVENEGAR_API_KEY = env("KAVENEGAR_API_KEY", "")
+# ghasedak.me: کلید API، شماره خط ارسال (اختیاری برای خط اشتراکی) و قالب کد ورود (اختیاری)
+GHASEDAK_API_KEY = env("GHASEDAK_API_KEY", "")
+GHASEDAK_LINE = env("GHASEDAK_LINE", "")
+GHASEDAK_OTP_TEMPLATE = env("GHASEDAK_OTP_TEMPLATE", "")
 KAVENEGAR_OTP_TEMPLATE = env("KAVENEGAR_OTP_TEMPLATE", "verify")
 OTP_TTL_SECONDS = 120
 # در حالت توسعه کد تایید در پاسخ API برگردانده می‌شود

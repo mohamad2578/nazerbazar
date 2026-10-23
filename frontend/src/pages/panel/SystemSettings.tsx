@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, ChartColumn, Save, Store, Tags } from "lucide-react";
+import { Building2, ChartColumn, MessageSquareText, Save, Store, Tags } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, Card, cx, Loading, PageHeader, useToast } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -18,6 +18,7 @@ export default function SystemSettings() {
     mutationFn: () => api.patch<SettingsT>("/settings/", {
       union_can_set_prices: f!.union_can_set_prices,
       snap_store_prices: f!.snap_store_prices,
+      sms_on_price_change: f!.sms_on_price_change,
       union_sections: f!.union_sections,
       samt_reports: f!.samt_reports,
     }),
@@ -48,6 +49,14 @@ export default function SystemSettings() {
         <Choice checked={!f.snap_store_prices} onChange={() => setF({ ...f, snap_store_prices: false })}
           title="آخرین قیمت هر فروشگاه حفظ شود"
           desc="فقط قیمتی که از بازه مجاز جدید بیرون بیفتد به نزدیک‌ترین حد مجاز (سقف یا کف) آورده می‌شود." />
+      </Section>
+
+      <Section icon={<MessageSquareText className="size-5" />} title="پیامک تغییر حداکثر قیمت به فروشگاه‌ها"
+        hint="هر بار حداکثر قیمت یک کالا عوض شود، به فروشگاه‌هایی که برای آن کالا قیمت و موجودی اعلام کرده‌اند پیامک می‌رود.">
+        <Choice checked={f.sms_on_price_change} onChange={() => setF({ ...f, sms_on_price_change: true })}
+          title="ارسال شود" desc="متن: «فروشگاه گرامی …، حداکثر قیمت … به … تومان تغییر یافت؛ ظرف ۲۴ ساعت قیمت جدید را اعلام کنید، در غیر این صورت قیمت قبلی باقی می‌ماند و مسئولیت آن با فروشگاه است.»" />
+        <Choice checked={!f.sms_on_price_change} onChange={() => setF({ ...f, sms_on_price_change: false })}
+          title="ارسال نشود" desc="فقط اعلان داخل پنل فروشگاه نمایش داده می‌شود." />
       </Section>
 
       <Section icon={<Building2 className="size-5" />} title="بخش‌های در دسترس پنل اتحادیه"

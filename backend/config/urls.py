@@ -89,6 +89,7 @@ api = [
     path("prices/<int:pk>/review/", price_api.review_price),
     path("prices/log/", price_api.price_log),
     path("settings/", settings_api.system_settings),
+    path("sms-log/", settings_api.sms_log),
     path("prices/bulk-template/", price_api.bulk_template),
     path("prices/bulk-upload/", price_api.bulk_upload),
     path("analytics/overview/", analytics.overview),

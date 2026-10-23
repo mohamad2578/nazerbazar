@@ -72,7 +72,7 @@ function ManagerDashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="فروشگاه فعال" value={num(d.stores.active)} sub={access.unionSection("stores") ? <Link to="/panel/stores?status=pending" className="text-warn">{num(d.stores.pending)} در انتظار تایید</Link> : `${num(d.stores.pending)} در انتظار تایید`} icon={<Store className="size-4" />} />
         <Stat label="کالای نرخ‌گذاری‌شده" value={num(d.products.priced)} sub={`${num(d.price_changes.last_7_days)} تغییر نرخ در ۷ روز`} icon={<Package className="size-4" />} />
-        <Stat label="انطباق قیمت فروشگاه‌ها" value={pct(d.offers.compliance_percent)} sub={`${num(d.offers.hidden_stale)} قیمت به‌روزنشده (پنهان)`} icon={<ShieldCheck className="size-4" />} tone={d.offers.compliance_percent >= 90 ? "ok" : "warn"} />
+        <Stat label="انطباق قیمت فروشگاه‌ها" value={pct(d.offers.compliance_percent)} sub={`${num(d.offers.hidden_stale)} قیمت بدون تایید پس از تغییر`} icon={<ShieldCheck className="size-4" />} tone={d.offers.compliance_percent >= 90 ? "ok" : "warn"} />
         <Stat label="شکایات باز" value={num(d.complaints.open)} sub={`میانگین رسیدگی ${d.complaints.avg_resolution_hours != null ? num(d.complaints.avg_resolution_hours, 1) + " ساعت" : "—"}`} icon={<MessageSquareWarning className="size-4" />} tone={d.complaints.open ? "danger" : "ok"} />
       </div>
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">

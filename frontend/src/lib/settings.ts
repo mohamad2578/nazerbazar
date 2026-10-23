@@ -5,6 +5,7 @@ import { useAuth } from "./auth";
 export type SystemSettings = {
   union_can_set_prices: boolean;
   snap_store_prices: boolean;
+  sms_on_price_change: boolean;
   union_sections: string[];
   sections: { key: string; label: string }[];
   samt_reports: string[];

@@ -13,7 +13,7 @@ const MapView = lazy(() => import("../../components/MapView"));
 type StoreDetailT = {
   id: number; name: string; address: string; phone: string; lat: string | null; lng: string | null; working_hours: string;
   is_verified: boolean; rating_avg: string; rating_count: number; union_name: string; county_name: string; photo: string | null;
-  offers: { product: number; name: string; unit_display: string; price: number; official_price: number; discount_percent: number; pending_update: boolean }[];
+  offers: { product: number; name: string; unit_display: string; price: number; official_price: number; discount_percent: number }[];
   reviews: { id: number; rating: number; comment: string; user_name: string; created_at: string }[];
 };
 
@@ -79,7 +79,7 @@ export default function StoreDetail() {
               </div>
               <div className="shrink-0 text-left">
                 <div className="font-semibold tabular">{toman(o.price)}</div>
-                {o.pending_update ? <Badge tone="warn">در انتظار به‌روزرسانی</Badge> : o.discount_percent > 0 && <Badge tone="ok">{num(o.discount_percent, 1)}٪ ارزان‌تر</Badge>}
+                {o.discount_percent > 0 && <Badge tone="ok">{num(o.discount_percent, 1)}٪ ارزان‌تر</Badge>}
               </div>
             </Link>
           ))}

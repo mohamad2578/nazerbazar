@@ -80,7 +80,7 @@ export default function Prices() {
       {staleCount > 0 && (
         <Card className="flex items-start gap-2 border-danger/30 bg-danger-soft p-3 text-sm text-danger">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          حداکثر قیمت {num(staleCount)} کالا تغییر کرده است. اگر ظرف ۲۴ ساعت قیمت را به‌روز یا تایید نکنید، آن کالا موقتا از فهرست عمومی فروشگاه شما حذف می‌شود.
+          حداکثر قیمت {num(staleCount)} کالا تغییر کرده است. لطفا ظرف ۲۴ ساعت قیمت را به‌روز یا تایید کنید؛ در غیر این صورت قیمت اعلامی قبلی شما باقی می‌ماند و مسئولیت آن بر عهده فروشگاه است.
         </Card>
       )}
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -110,7 +110,7 @@ export default function Prices() {
                   <div className="text-xs text-muted">هر {i.unit_display} · حداکثر قیمت <b className="text-ink">{toman(i.official_price)}</b></div>
                 </div>
                 {i.is_stale ? (
-                  <Badge tone="danger">{i.hidden ? "پنهان از فهرست" : `مهلت ${num(Math.max(0, Math.floor(h ?? 0)))} ساعت`}</Badge>
+                  <Badge tone="warn">{(h ?? 0) > 0 ? `مهلت ${num(Math.floor(h ?? 0))} ساعت` : "تایید نشده"}</Badge>
                 ) : i.offer_price != null ? <Badge tone="ok">فعال</Badge> : <Badge>بدون قیمت</Badge>}
               </div>
               <div className="mt-3 flex items-center gap-2">

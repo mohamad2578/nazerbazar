@@ -48,8 +48,10 @@ class SystemSettings(models.Model):
 
     union_can_set_prices = models.BooleanField(
         "اتحادیه می‌تواند حداکثر قیمت ثبت یا تغییر دهد", default=True)
+    sms_on_price_change = models.BooleanField(
+        "با تغییر حداکثر قیمت به فروشگاه‌های دارای قیمت پیامک برود", default=True)
     snap_store_prices = models.BooleanField(
-        "با تغییر حداکثر قیمت، قیمت همه فروشگاه‌ها برابر آن شود", default=True,
+        "با تغییر حداکثر قیمت، قیمت همه فروشگاه‌ها برابر آن شود", default=False,
         help_text="خاموش: هر فروشگاه آخرین قیمت خودش را نگه می‌دارد، مگر اینکه خارج از بازه مجاز جدید باشد.")
     union_sections = models.JSONField("بخش‌های در دسترس اتحادیه", default=_all_union_sections)
     samt_reports = models.JSONField("گزارش‌های قابل مشاهده برای اداره صمت", default=_all_samt_reports)
@@ -83,3 +85,19 @@ def require_report(user, key: str) -> None:
     # برای اتحادیه، کل بخش «گزارش‌های تحلیلی» یک کلید دارد (آمار بازدید اصلا برای اتحادیه نیست)
     if role == "union" and key != "visits" and not SystemSettings.get().union_allows("reports"):
         raise PermissionDenied("بخش گزارش‌ها برای اتحادیه‌ها غیرفعال است.")
+
+
+class SmsLog(models.Model):
+    """سابقه پیامک‌های ارسال‌شده توسط سامانه (برای عیب‌یابی و پاسخ به «پیامک نرسید»)."""
+
+    kind = models.CharField("نوع", max_length=20, db_index=True)
+    mobile = models.CharField("گیرنده", max_length=11, db_index=True)
+    text = models.CharField("متن", max_length=500)
+    ok = models.BooleanField("پذیرفته شد", default=False)
+    detail = models.CharField("پاسخ سرویس‌دهنده", max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "پیامک"
+        verbose_name_plural = "پیامک‌ها"

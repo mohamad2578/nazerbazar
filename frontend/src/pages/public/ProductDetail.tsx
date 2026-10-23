@@ -17,7 +17,6 @@ export type Offer = {
   price: number;
   discount_percent: number;
   confirmed_at: string;
-  pending_update: boolean;
   distance_km: number | null;
   shop_products: number;
   store: {
@@ -120,7 +119,7 @@ export default function ProductDetail() {
       <p className="flex items-start gap-2 rounded-xl bg-surface-2 p-3 text-xs leading-6 text-muted">
         <Info className="mt-1 size-4 shrink-0" />
         قیمت‌ها از کمترین به بیشترین مرتب شده‌اند. فروشگاه‌ها مجازند حداکثر {num(p.max_discount_percent)}٪ کمتر از حداکثر قیمت بفروشند.
-        اگر حداکثر قیمت تغییر کند و فروشگاهی ظرف ۲۴ ساعت قیمت خود را به‌روز نکند، تا زمان به‌روزرسانی در این فهرست نمایش داده نمی‌شود.
+        پس از هر تغییر حداکثر قیمت، فروشگاه‌ها ۲۴ ساعت فرصت دارند قیمت خود را اصلاح کنند.
       </p>
     </div>
   );
@@ -153,7 +152,6 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
                 <Clock className="size-3.5" /> {s.working_hours}
               </span>
             )}
-            {o.pending_update && <Badge tone="warn">در انتظار به‌روزرسانی نرخ</Badge>}
           </div>
         </div>
         <div className="text-left">

@@ -1,7 +1,8 @@
 """قواعد اصلی بازار:
 1. فروشگاه فقط می‌تواند بین «نرخ اتحادیه» و «نرخ اتحادیه منهای حداکثر تخفیف» (پیش‌فرض ۲۰٪) قیمت بدهد.
-2. اگر اتحادیه نرخ را تغییر دهد و فروشگاه ظرف مهلت (پیش‌فرض ۲۴ ساعت) قیمتش را تایید/به‌روز نکند،
-   آن کالا در آن فروشگاه موقتا از فهرست عمومی حذف می‌شود تا به‌روزرسانی انجام شود.
+2. اگر حداکثر قیمت تغییر کند، به فروشگاه‌های دارای قیمت پیامک و اعلان می‌رود تا ظرف ۲۴ ساعت قیمتشان را
+   اصلاح کنند؛ در غیر این صورت قیمت اعلامی قبلی باقی می‌ماند و مسئولیتش با فروشگاه است.
+   هیچ کالایی به‌خاطر به‌روز نکردن قیمت از فهرست عمومی حذف نمی‌شود.
 """
 from datetime import timedelta
 
@@ -23,12 +24,12 @@ def grace_period() -> timedelta:
 
 
 def visible_offers(now=None):
-    """قیمت‌هایی که در سایت عمومی نمایش داده می‌شوند."""
-    now = now or timezone.now()
-    fresh = Q(product__price_changed_at__isnull=True) | Q(confirmed_at__gte=F("product__price_changed_at"))
-    in_grace = Q(product__price_changed_at__gt=now - grace_period())
+    """قیمت‌هایی که در سایت عمومی نمایش داده می‌شوند.
+
+    قاعده «حذف کالا اگر ظرف ۲۴ ساعت قیمت به‌روز نشود» برداشته شده است: قیمت اعلامی فروشگاه
+    تا وقتی خودش عوض نکند باقی می‌ماند (با پیامک به فروشگاه اطلاع داده می‌شود).
+    """
     return StoreOffer.objects.filter(
-        fresh | in_grace,
         is_available=True,
         store__status=Store.Status.ACTIVE,
         product__is_active=True,
@@ -172,12 +173,12 @@ def _apply_price(record: OfficialPrice, product: Product, discount: int) -> None
         owners = User.objects.filter(stores__offers__product=product).distinct()
         notify(
             owners,
-            f"تغییر نرخ «{product.name}»",
-            f"نرخ جدید {price:,} ریال است و فعلا قیمت فروشگاه شما هم برابر همین نرخ شد. "
-            f"ظرف {hours} ساعت وارد شوید و قیمت خود را تایید یا کم کنید؛ "
-            "در غیر این صورت این کالا موقتا از فهرست فروشگاه شما حذف می‌شود.",
+            f"تغییر حداکثر قیمت «{product.name}»",
+            f"حداکثر قیمت جدید {price:,} ریال است. حداکثر ظرف {hours} ساعت وارد پنل شوید و قیمت خود را "
+            "تایید یا کم کنید؛ در غیر این صورت قیمت اعلامی قبلی شما باقی می‌ماند و مسئولیت آن با فروشگاه است.",
             "/panel/prices",
         )
+        notify_stores_of_price_change(product, price)
         change = percent_change(previous, price)
         if change is not None and abs(change) >= settings.MARKET["ALERT_CHANGE_PERCENT"]:
             from apps.observatory.services import raise_official_price_alert
@@ -278,3 +279,21 @@ def assign_categories() -> int:
                 changed += 1
                 break
     return changed
+
+
+def notify_stores_of_price_change(product: Product, price_rial: int) -> int:
+    """پیامک به فروشگاه‌هایی که برای این کالا قیمت داده و موجودی اعلام کرده‌اند."""
+    from apps.core.models import SystemSettings
+    from apps.core.sms import send_price_change_sms
+
+    if not SystemSettings.get().sms_on_price_change:
+        return 0
+    offers = (StoreOffer.objects.filter(product=product, is_available=True, store__status=Store.Status.ACTIVE)
+              .select_related("store__owner"))
+    sent = 0
+    for o in offers:
+        mobile = o.store.owner.mobile
+        if mobile:
+            send_price_change_sms(mobile, o.store.name, product.name, price_rial // 10)
+            sent += 1
+    return sent

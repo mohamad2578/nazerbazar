@@ -27,6 +27,7 @@ const Visits = lazy(() => import("./pages/panel/Visits"));
 const Specials = lazy(() => import("./pages/panel/Specials"));
 const SystemSettingsPage = lazy(() => import("./pages/panel/SystemSettings"));
 const PriceLog = lazy(() => import("./pages/panel/PriceLog"));
+const SmsLog = lazy(() => import("./pages/panel/SmsLog"));
 const Discounts = lazy(() => import("./pages/public/Discounts"));
 
 const Dashboard = lazy(() => import("./pages/panel/Dashboard"));
@@ -121,6 +122,7 @@ export default function App() {
           <Route path="slides" element={<RequireAuth roles={[]}><Slides /></RequireAuth>} />
           <Route path="backup" element={<RequireAuth roles={[]}><Backup /></RequireAuth>} />
           <Route path="settings" element={<RequireAuth roles={[]}><SystemSettingsPage /></RequireAuth>} />
+          <Route path="sms-log" element={<RequireAuth roles={[]}><SmsLog /></RequireAuth>} />
           <Route path="price-log" element={<RequireAuth roles={["samt"]}><PriceLog /></RequireAuth>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

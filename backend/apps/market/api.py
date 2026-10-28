@@ -15,7 +15,7 @@ from apps.core.views import ScopedModelViewSet
 from apps.orgs.models import Store, stores_in_county
 
 from . import services
-from .models import Category, OfficialPrice, Product, Review, StoreOffer
+from .models import Category, OfficialPrice, Product, Review, ServiceTariff, StoreOffer
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -34,6 +34,7 @@ class ProductSerializer(serializers.ModelSerializer):
     offers_count = serializers.IntegerField(read_only=True, default=0)
     stale_count = serializers.IntegerField(read_only=True, default=0)
     pending_price = serializers.SerializerMethodField()
+    tariff_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Product
@@ -41,7 +42,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "id", "union", "union_name", "category", "category_name", "commodity", "commodity_name", "name",
             "unit", "unit_display", "unit_amount", "description", "image", "current_price", "max_discount_percent",
             "min_allowed_price", "price_changed_at", "is_active", "initial_price", "offers_count", "stale_count",
-            "pending_price",
+            "pending_price", "is_service", "tariff_count",
         ]
         read_only_fields = ["current_price", "price_changed_at"]
         extra_kwargs = {"union": {"required": False}}
@@ -64,6 +65,12 @@ class OfficialPriceSerializer(serializers.ModelSerializer):
         model = OfficialPrice
         fields = ["id", "price", "previous_price", "max_discount_percent", "note", "set_by_name", "set_by_role",
                   "created_at", "status", "status_display", "review_note", "reviewed_at", "reviewed_by_name"]
+
+
+class TariffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ServiceTariff
+        fields = ["id", "order", "title", "price"]
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -99,6 +106,7 @@ class ProductViewSet(ScopedModelViewSet):
         return super().get_queryset().annotate(
             offers_count=Count("offers", distinct=True),
             stale_count=Count("offers", filter=Q(offers__confirmed_at__lt=F("price_changed_at")), distinct=True),
+            tariff_count=Count("tariffs", distinct=True),
         )
 
     def perform_create(self, serializer):
@@ -127,6 +135,8 @@ class ProductViewSet(ScopedModelViewSet):
     @action(detail=True, methods=["post"])
     def set_price(self, request, pk=None):
         product = self.get_object()
+        if product.is_service:
+            raise ValidationError({"detail": "این کالا خدماتی است؛ نرخ‌نامه خدمات را ویرایش کنید."})
         if request.user.role not in (Role.UNION, Role.SAMT, Role.CHAMBER, Role.GOVERNORATE, Role.ADMIN):
             raise ValidationError({"detail": "شما مجاز به تعیین نرخ نیستید."})
         try:
@@ -140,6 +150,35 @@ class ProductViewSet(ScopedModelViewSet):
         data = ProductSerializer(product, context={"request": request}).data
         data["submitted_status"] = record.status
         return Response(data)
+
+    @action(detail=True, methods=["get", "put"])
+    def tariffs(self, request, pk=None):
+        """نرخ‌نامه خدمات یک کالای خدماتی.
+
+        GET فهرست ردیف‌ها؛ PUT کل نرخ‌نامه را با فهرست ارسالی [{title, price}] جایگزین می‌کند
+        (قیمت‌ها به ریال). ردیف‌ها به ترتیب ارسال شماره‌گذاری می‌شوند.
+        """
+        product = self.get_object()
+        if request.method == "GET":
+            return Response(TariffSerializer(product.tariffs.all(), many=True).data)
+        if not product.is_service:
+            raise ValidationError({"detail": "این کالا «خدماتی» نیست؛ ابتدا گزینه کالای خدماتی را در ویرایش کالا فعال کنید."})
+        items = request.data if isinstance(request.data, list) else request.data.get("items", [])
+        rows = []
+        for i, it in enumerate(items, 1):
+            title = str(it.get("title", "")).strip()
+            try:
+                price = int(it.get("price"))
+            except (TypeError, ValueError):
+                price = 0
+            if not title or price < 1:
+                raise ValidationError({"detail": f"ردیف {i}: شرح خدمت و تعرفه (ریال) را درست وارد کنید."})
+            rows.append(ServiceTariff(product=product, order=i, title=title[:300], price=price))
+        with transaction.atomic():
+            product.tariffs.all().delete()
+            ServiceTariff.objects.bulk_create(rows)
+            Product.objects.filter(pk=product.pk).update(price_changed_at=timezone.now())
+        return Response(TariffSerializer(product.tariffs.all(), many=True).data)
 
     @action(detail=True)
     def history(self, request, pk=None):
@@ -204,7 +243,7 @@ def store_catalog(request):
     grace = services.grace_period()
     rows = []
     products = (
-        Product.objects.filter(union_id__in=store.priceable_union_ids(), is_active=True)
+        Product.objects.filter(union_id__in=store.priceable_union_ids(), is_active=True, is_service=False)
         .select_related("category", "union").order_by("union__name", "name")
     )
     for p in products:
@@ -266,7 +305,9 @@ def store_remove_offer(request, product_id):
 
 def _public_products(params):
     visible = services.visible_offers()
-    qs = Product.objects.filter(is_active=True, current_price__gt=0, union__is_active=True).select_related(
+    qs = Product.objects.filter(
+        Q(current_price__gt=0) | Q(is_service=True, tariffs__isnull=False), is_active=True, union__is_active=True,
+    ).distinct().select_related(
         "union__chamber__county", "category"
     )
     if county := params.get("county"):
@@ -295,6 +336,7 @@ def _product_card(p, request):
         "official_price": p.current_price, "min_allowed_price": p.min_allowed_price,
         "price_changed_at": p.price_changed_at,
         "offers_count": getattr(p, "offers_count", None) or 0, "min_price": getattr(p, "min_price", None),
+        "is_service": p.is_service,
     }
 
 
@@ -372,6 +414,14 @@ def public_product_detail(request, pk):
         rows.sort(key=lambda r: (r["distance_km"] if r["distance_km"] is not None else 1e9, r["price"]))
     history = list(p.price_history.values("price", "created_at")[:30])[::-1]
     card = _product_card(p, request)
+    if p.is_service:
+        tariffs = list(p.tariffs.values("id", "order", "title", "price"))
+        card.update({
+            "description": p.description, "union_phone": p.union.phone, "offers": [], "history": [], "offers_count": 0,
+            "min_price": None, "avg_price": None, "max_discount_percent": p.max_discount_percent,
+            "tariffs": tariffs, "tariff_from": min((t["price"] for t in tariffs), default=None),
+        })
+        return Response(card)
     card.update({
         "description": p.description, "max_discount_percent": p.max_discount_percent,
         "union_phone": p.union.phone, "offers": rows, "history": history,

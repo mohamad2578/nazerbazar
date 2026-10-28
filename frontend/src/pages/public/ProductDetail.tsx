@@ -30,6 +30,8 @@ type Detail = {
   county_name: string; description: string; official_price: number; min_allowed_price: number; max_discount_percent: number;
   price_changed_at: string | null; offers: Offer[]; offers_count: number; min_price: number | null; avg_price: number | null;
   history: { price: number; created_at: string }[];
+  is_service?: boolean;
+  tariffs?: { id: number; order: number; title: string; price: number }[];
 };
 
 export default function ProductDetail() {
@@ -71,6 +73,9 @@ export default function ProductDetail() {
         </div>
       </Card>
 
+      {p.is_service && <TariffTable p={p} />}
+
+      {!p.is_service && (<>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold">فروشگاه‌های عرضه‌کننده</h2>
         <div className="flex items-center gap-2">
@@ -115,6 +120,7 @@ export default function ProductDetail() {
           ))}
         </ol>
       )}
+      </>)}
 
       <p className="flex items-start gap-2 rounded-xl bg-surface-2 p-3 text-xs leading-6 text-muted">
         <Info className="mt-1 size-4 shrink-0" />
@@ -191,3 +197,29 @@ export function OfferRow({ o, rank, best, productId }: { o: Offer; rank: number;
   );
 }
 
+
+function TariffTable({ p }: { p: Detail }) {
+  const rows = p.tariffs ?? [];
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-baseline justify-between gap-2 border-b border-line px-4 py-3">
+        <h2 className="font-semibold">نرخ‌نامه خدمات</h2>
+        <span className="text-xs text-muted">{num(rows.length)} خدمت · قیمت‌ها مصوب اتحادیه است</span>
+      </div>
+      {!rows.length ? <Empty title="هنوز نرخ‌نامه‌ای ثبت نشده است" /> : (
+        <ol className="divide-y divide-line">
+          {rows.map((t, i) => (
+            <li key={t.id} className="flex items-start gap-3 px-4 py-2.5 text-sm">
+              <span className="w-6 shrink-0 pt-0.5 text-center text-xs text-muted tabular">{num(i + 1)}</span>
+              <span className="min-w-0 flex-1 leading-6">{t.title}</span>
+              <b className="shrink-0 whitespace-nowrap tabular">{toman(t.price)}</b>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="border-t border-line px-4 py-3 text-xs leading-6 text-muted">
+        اگر خدمتی را بیشتر از این تعرفه پرداخت کرده‌اید، <Link to={`/report?product=${p.id}`} className="text-brand underline">گزارش دهید</Link>.
+      </p>
+    </Card>
+  );
+}

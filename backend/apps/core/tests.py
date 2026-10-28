@@ -1314,3 +1314,58 @@ class PriceChangeSmsTests(Base):
         self.assertEqual(self.client_for(self.samt).get("/api/sms-log/").status_code, 403)
         r = self.client_for(self.admin).get("/api/sms-log/", {"ok": "false"})
         self.assertEqual((r.status_code, r.data["failed"], len(r.data["results"])), (200, 1, 1))
+
+
+class ServiceTariffTests(Base):
+    """کالای خدماتی: به‌جای حداکثر قیمت، نرخ‌نامه‌ای از خدمات دارد."""
+
+    def setUp(self):
+        self.svc = Product.objects.create(union=self.union, name="تعویض روغن", unit="piece", is_service=True)
+        self.rows = [{"title": "تعویض روغن سواری", "price": 800_000}, {"title": "تعویض فیلتر", "price": 500_000}]
+
+    def put(self, user, product=None, items=None):
+        return self.client_for(user).put(
+            f"/api/products/{(product or self.svc).pk}/tariffs/", {"items": items or self.rows}, format="json"
+        )
+
+    def test_union_replaces_its_tariff_and_numbers_rows(self):
+        r = self.put(self.uni)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([(t["order"], t["title"], t["price"]) for t in r.data],
+                         [(1, "تعویض روغن سواری", 800_000), (2, "تعویض فیلتر", 500_000)])
+        r = self.put(self.uni, items=[{"title": "فقط یک ردیف", "price": 1}])
+        self.assertEqual(len(r.data), 1)
+        self.svc.refresh_from_db()
+        self.assertIsNotNone(self.svc.price_changed_at)
+
+    def test_invalid_rows_and_non_service_rejected(self):
+        self.assertEqual(self.put(self.uni, items=[{"title": "", "price": 5}]).status_code, 400)
+        self.assertEqual(self.put(self.uni, items=[{"title": "x", "price": "abc"}]).status_code, 400)
+        self.assertEqual(self.put(self.uni, product=self.product).status_code, 400)
+        self.assertEqual(self.client_for(self.uni).post(f"/api/products/{self.svc.pk}/set_price/", {"price": 5}).status_code, 400)
+
+    def test_other_union_and_citizen_cannot_edit(self):
+        self.assertEqual(self.put(self.uni2).status_code, 404)
+        self.assertEqual(self.put(self.citizen).status_code, 403)
+
+    def test_public_listing_and_detail(self):
+        self.assertNotIn(self.svc.pk, [p["id"] for p in self.client_for(self.citizen).get("/api/public/products/").data["results"]])
+        self.put(self.uni)
+        res = APIClient().get("/api/public/products/").data["results"]
+        card = next(p for p in res if p["id"] == self.svc.pk)
+        self.assertTrue(card["is_service"])
+        d = APIClient().get(f"/api/public/products/{self.svc.pk}/").data
+        self.assertEqual((d["is_service"], len(d["tariffs"]), d["tariff_from"], d["offers"]), (True, 2, 500_000, []))
+
+    def test_service_not_in_store_catalog_and_command_seeds_it(self):
+        from django.core.management import call_command
+
+        cat = self.client_for(self.stores[0].owner).get("/api/store/catalog/").data["items"]
+        self.assertNotIn(self.svc.pk, [i["product"] for i in cat])
+        union = Union.objects.create(chamber=self.chamber, name="اتحادیه تعمیرکاران اتومبیل")
+        call_command("seed_service_tariffs")
+        call_command("seed_service_tariffs")  # اجرای دوباره، تکراری نمی‌سازد
+        p = Product.objects.get(union=union, name="تعویض روغن")
+        self.assertTrue(p.is_service)
+        self.assertEqual(p.tariffs.count(), 26)
+        self.assertEqual(p.tariffs.get(order=26).price, 9_000_000)

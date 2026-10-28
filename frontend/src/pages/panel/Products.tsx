@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Pencil, Plus, Search, TrendingUp } from "lucide-react";
+import { Download, ListChecks, Pencil, Plus, Search, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import ImageUpload from "../../components/ImageUpload";
+import TariffEditor from "./TariffEditor";
 import Sparkline from "../../components/Sparkline";
 import { Badge, Button, Card, DataTable, Empty, Field, Input, Loading, PageHeader, PriceInput, Select, Sheet, Textarea, useToast } from "../../components/ui";
 import { api, download, fieldErrors, type Page } from "../../lib/api";
@@ -13,7 +14,7 @@ type ProductT = {
   id: number; union: number; union_name: string; category: number | null; category_name: string; commodity: number | null;
   commodity_name: string; name: string; unit: string; unit_display: string; unit_amount: string; description: string;
   current_price: number; max_discount_percent: number; min_allowed_price: number; price_changed_at: string | null;
-  is_active: boolean; offers_count: number; stale_count: number; image: string | null;
+  is_active: boolean; is_service: boolean; tariff_count: number; offers_count: number; stale_count: number; image: string | null;
   pending_price: { id: number; price: number; created_at: string; note: string } | null;
 };
 
@@ -64,17 +65,19 @@ export default function Products() {
               ) },
               { key: "current_price", label: "حداکثر قیمت", render: (p) => (
                 <div>
-                  <b className="tabular">{toman(p.current_price)}</b>
-                  {p.pending_price && (
+                  {p.is_service
+                    ? <span className="inline-flex items-center gap-1 whitespace-nowrap text-brand"><ListChecks className="size-4" /> نرخ‌نامه · {num(p.tariff_count)} خدمت</span>
+                    : <b className="tabular">{toman(p.current_price)}</b>}
+                  {!p.is_service && p.pending_price && (
                     <div className="mt-0.5 whitespace-nowrap text-[11px] text-warn">
                       {toman(p.pending_price.price)} در انتظار تایید
                     </div>
                   )}
                 </div>
               ) },
-              { key: "min", label: "حداقل مجاز", render: (p) => <span className="tabular text-muted">{toman(p.min_allowed_price)}</span>, hideOnMobile: true },
-              { key: "offers_count", label: "فروشگاه", render: (p) => num(p.offers_count) },
-              { key: "stale_count", label: "به‌روزنشده", render: (p) => (p.stale_count ? <Badge tone="warn">{num(p.stale_count)}</Badge> : "—") },
+              { key: "min", label: "حداقل مجاز", render: (p) => (p.is_service ? "—" : <span className="tabular text-muted">{toman(p.min_allowed_price)}</span>), hideOnMobile: true },
+              { key: "offers_count", label: "فروشگاه", render: (p) => (p.is_service ? "—" : num(p.offers_count)) },
+              { key: "stale_count", label: "به‌روزنشده", render: (p) => (!p.is_service && p.stale_count ? <Badge tone="warn">{num(p.stale_count)}</Badge> : "—") },
               { key: "price_changed_at", label: "آخرین تغییر", render: (p) => ago(p.price_changed_at) },
               ...(canEdit ? [{ key: "edit", label: "", render: (p: ProductT) => <button onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="text-muted hover:text-ink" aria-label="ویرایش"><Pencil className="size-4" /></button> }] : []),
             ]}
@@ -88,7 +91,9 @@ export default function Products() {
         </div>
       )}
       {editing && <ProductForm product={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
-      {pricing && <PriceSheet product={pricing} onClose={() => setPricing(null)} />}
+      {pricing && (pricing.is_service
+        ? <TariffEditor product={pricing} canEdit={canEdit} onClose={() => setPricing(null)} />
+        : <PriceSheet product={pricing} onClose={() => setPricing(null)} />)}
     </div>
   );
 }
@@ -109,10 +114,11 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
   const [f, setF] = useState({
     name: product?.name ?? "", unit: product?.unit ?? "kg", unit_amount: product?.unit_amount ?? "1", category: product?.category ?? "",
     commodity: product?.commodity ?? "", description: product?.description ?? "", max_discount_percent: product?.max_discount_percent ?? 20,
-    union: product?.union ?? "", initial_price: "",
+    union: product?.union ?? "", initial_price: "", is_service: product?.is_service ?? false,
   });
   const [image, setImage] = useState<File | null | undefined>(undefined);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const service = f.is_service;
   const m = useMutation({
     mutationFn: () => {
       const body: any = { ...f, category: f.category || null, commodity: f.commodity || null };
@@ -155,12 +161,16 @@ function ProductForm({ product, onClose }: { product: ProductT | null; onClose: 
             </Select>
           </Field>
         )}
+        <label className="flex items-start gap-2 rounded-xl bg-surface-2 p-3 text-sm sm:col-span-2">
+          <input type="checkbox" className="mt-1 size-4" checked={f.is_service} onChange={(e) => setF({ ...f, is_service: e.target.checked })} />
+          <span><b>کالای خدماتی (دارای نرخ‌نامه)</b><br /><span className="text-xs text-muted">مثل تعویض روغن: به‌جای یک حداکثر قیمت، فهرستی از خدمات و تعرفه هر کدام دارد و فروشگاه‌ها قیمت جداگانه ثبت نمی‌کنند. پس از ذخیره، روی کالا بزنید تا نرخ‌نامه را وارد کنید.</span></span>
+        </label>
         <Field label="واحد"><Select value={f.unit} onChange={set("unit")}>{UNITS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
         <Field label="مقدار واحد" hint="مثلا ۱۰ برای کیسه ۱۰ کیلویی"><Input value={f.unit_amount} onChange={set("unit_amount")} inputMode="decimal" dir="ltr" /></Field>
         <Field label="دسته"><Select value={String(f.category)} onChange={set("category")}><option value="">—</option>{cats.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
         <Field label="کالای اساسی مرتبط" hint="برای رصدخانه و سبد خانوار"><Select value={String(f.commodity)} onChange={set("commodity")}><option value="">—</option>{coms.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
-        <Field label="حداکثر تخفیف مجاز فروشگاه (٪)" error={err.max_discount_percent}><Input type="number" value={f.max_discount_percent} onChange={set("max_discount_percent")} min={0} max={90} dir="ltr" /></Field>
-        {!product && <Field label="حداکثر قیمت اولیه"><PriceInput value={f.initial_price} onChange={(v) => setF({ ...f, initial_price: v })} /></Field>}
+        {!service && <Field label="حداکثر تخفیف مجاز فروشگاه (٪)" error={err.max_discount_percent}><Input type="number" value={f.max_discount_percent} onChange={set("max_discount_percent")} min={0} max={90} dir="ltr" /></Field>}
+        {!product && !service && <Field label="حداکثر قیمت اولیه"><PriceInput value={f.initial_price} onChange={(v) => setF({ ...f, initial_price: v })} /></Field>}
         <Field label="توضیحات" className="sm:col-span-2"><Textarea value={f.description} onChange={set("description")} className="min-h-16" /></Field>
       </div>
       {m.error && !Object.keys(err).length && <p className="mt-3 text-sm text-danger">{(m.error as Error).message}</p>}

@@ -70,6 +70,10 @@ class Product(TimeStamped):
     )
     price_changed_at = models.DateTimeField("زمان آخرین تغییر نرخ", null=True, blank=True, db_index=True)
     is_active = models.BooleanField("فعال", default=True)
+    is_service = models.BooleanField(
+        "کالای خدماتی", default=False,
+        help_text="به‌جای یک حداکثر قیمت و قیمت فروشگاه‌ها، نرخ‌نامه‌ای از خدمات دارد (مثلا تعویض روغن)",
+    )
 
     SCOPE = {"province": "union__chamber__county__province", "chamber": "union__chamber", "union": "union"}
 
@@ -85,6 +89,25 @@ class Product(TimeStamped):
     def min_allowed_price(self) -> int:
         v = Decimal(self.current_price) * (Decimal(100 - self.max_discount_percent) / 100)
         return int(v.to_integral_value(ROUND_CEILING))
+
+
+class ServiceTariff(TimeStamped):
+    """یک ردیف از نرخ‌نامه خدمات (برای کالای خدماتی)؛ نرخ به ریال."""
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="tariffs", verbose_name="کالای خدماتی")
+    order = models.PositiveSmallIntegerField("ردیف", default=0)
+    title = models.CharField("شرح خدمت", max_length=300)
+    price = models.PositiveBigIntegerField("تعرفه (ریال)")
+
+    SCOPE = {"province": "product__union__chamber__county__province", "chamber": "product__union__chamber", "union": "product__union"}
+
+    class Meta:
+        verbose_name = "ردیف نرخ‌نامه"
+        verbose_name_plural = "نرخ‌نامه خدمات"
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"{self.product}: {self.title}"
 
 
 class OfficialPrice(models.Model):

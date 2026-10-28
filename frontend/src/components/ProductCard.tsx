@@ -1,4 +1,4 @@
-import { ChevronLeft, Store } from "lucide-react";
+import { ChevronLeft, ListChecks, Store } from "lucide-react";
 import { Link } from "react-router-dom";
 import { num, toman } from "../lib/format";
 
@@ -16,6 +16,7 @@ export type PublicProduct = {
   offers_count: number;
   min_price: number | null;
   previous_price?: number | null;
+  is_service?: boolean;
 };
 
 export function ProductThumb({ src, name, size = "size-14" }: { src?: string | null; name: string; size?: string }) {
@@ -35,6 +36,11 @@ export default function ProductCard({ p }: { p: PublicProduct }) {
         <div className="mt-0.5 truncate text-xs text-muted">
           {p.union_name} · هر {p.unit_display}
         </div>
+        {p.is_service ? (
+          <div className="mt-2 inline-flex items-center gap-1 text-xs text-brand">
+            <ListChecks className="size-3.5 shrink-0" /> نرخ‌نامه خدمات؛ برای دیدن تعرفه‌ها بزنید
+          </div>
+        ) : (
         <div className="mt-2 space-y-1">
           {p.min_price ? (
             <div className="inline-flex items-center gap-1 text-xs text-ok">
@@ -49,6 +55,7 @@ export default function ProductCard({ p }: { p: PublicProduct }) {
             <b className="tabular text-sm font-medium text-muted">{toman(p.official_price)}</b>
           </div>
         </div>
+        )}
       </div>
       <ChevronLeft className="size-5 shrink-0 text-muted" />
     </Link>

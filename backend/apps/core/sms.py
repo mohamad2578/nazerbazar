@@ -39,6 +39,14 @@ def _ghasedak_text(mobile: str, text: str) -> dict:
     return _post(f"{GHASEDAK_BASE}/sms/send/simple", data, {"apikey": settings.GHASEDAK_API_KEY})
 
 
+def _ghasedak_template(mobile: str, template: str, *params: str) -> dict:
+    """ارسال با قالب تاییدشده (verification): پارامترها جایگزین %param1% و … در متن قالب می‌شوند."""
+    data = {"receptor": mobile, "type": "1", "template": template}
+    for i, v in enumerate(params, 1):
+        data[f"param{i}"] = " ".join(str(v).split())[:60]    # قاصدک خط جدید و متن بلند در پارامتر را رد می‌کند
+    return _post(f"{GHASEDAK_BASE}/verification/send/simple", data, {"apikey": settings.GHASEDAK_API_KEY})
+
+
 def _record(kind: str, mobile: str, text: str, ok: bool, detail: str) -> None:
     try:
         from .models import SmsLog
@@ -74,13 +82,30 @@ def send_text(mobile: str, text: str, kind: str = "other") -> bool:
     return True
 
 
+def send_price_change(mobile: str, store: str, product: str, price_text: str) -> bool:
+    """پیامک تغییر قیمت؛ با قالب قاصدک (GHASEDAK_PRICE_TEMPLATE) و در نبودش با متن آزاد."""
+    text = PRICE_CHANGE_TEXT.format(store=store, product=product, price=price_text)
+    template = settings.GHASEDAK_PRICE_TEMPLATE
+    if settings.SMS_BACKEND == "ghasedak" and template:
+        try:
+            r = _ghasedak_template(mobile, template, store, product, price_text)
+            ok = (r.get("result") or {}).get("code") == 200
+            _record("price_change", mobile, text, ok, json.dumps(r, ensure_ascii=False))
+            return ok
+        except Exception as e:  # noqa: BLE001
+            log.exception("ghasedak price template failed for %s", mobile)
+            _record("price_change", mobile, text, False, f"{type(e).__name__}: {e}")
+            return False
+    return send_text(mobile, text, "price_change")
+
+
 def send_price_change_sms(mobile: str, store: str, product: str, price_toman: int) -> None:
     """پیامک تغییر حداکثر قیمت به فروشگاه؛ در رشته جدا ارسال می‌شود تا ثبت قیمت کند نشود."""
     from django.db import transaction
 
-    text = PRICE_CHANGE_TEXT.format(store=store, product=product, price=f"{price_toman:,}")
+    price = f"{price_toman:,}"
     # بعد از ثبت قطعی قیمت در دیتابیس و در رشته جدا؛ اگر ثبت قیمت برگردد، پیامکی نمی‌رود
-    transaction.on_commit(lambda: threading.Thread(target=send_text, args=(mobile, text, "price_change"), daemon=True).start())
+    transaction.on_commit(lambda: threading.Thread(target=send_price_change, args=(mobile, store, product, price), daemon=True).start())
 
 
 def send_otp(mobile: str, code: str) -> None:

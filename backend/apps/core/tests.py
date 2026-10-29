@@ -1369,3 +1369,24 @@ class ServiceTariffTests(Base):
         self.assertTrue(p.is_service)
         self.assertEqual(p.tariffs.count(), 26)
         self.assertEqual(p.tariffs.get(order=26).price, 9_000_000)
+
+
+class PriceSmsTemplateTests(Base):
+    def test_price_change_uses_ghasedak_template_when_configured(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from apps.core import sms
+        from apps.core.models import SmsLog
+
+        with override_settings(SMS_BACKEND="ghasedak", GHASEDAK_API_KEY="key", GHASEDAK_PRICE_TEMPLATE="nazerPrice"):
+            with mock.patch("apps.core.sms._post", return_value={"result": {"code": 200}}) as post:
+                self.assertTrue(sms.send_price_change("09123456789", "فروشگاه\nشهروند", "سیب زمینی", "65,000"))
+            url, data, headers = post.call_args.args
+            self.assertTrue(url.endswith("/verification/send/simple"))
+            self.assertEqual((data["template"], data["param1"], data["param2"], data["param3"]),
+                             ("nazerPrice", "فروشگاه شهروند", "سیب زمینی", "65,000"))
+        log = SmsLog.objects.get()
+        self.assertTrue(log.ok)
+        self.assertIn("65,000 تومان", log.text)

@@ -152,6 +152,7 @@ KAVENEGAR_API_KEY = env("KAVENEGAR_API_KEY", "")
 GHASEDAK_API_KEY = env("GHASEDAK_API_KEY", "")
 GHASEDAK_LINE = env("GHASEDAK_LINE", "")
 GHASEDAK_OTP_TEMPLATE = env("GHASEDAK_OTP_TEMPLATE", "")
+GHASEDAK_PRICE_TEMPLATE = env("GHASEDAK_PRICE_TEMPLATE", "")   # قالب پیامک تغییر حداکثر قیمت (param1=فروشگاه، param2=کالا، param3=قیمت)
 KAVENEGAR_OTP_TEMPLATE = env("KAVENEGAR_OTP_TEMPLATE", "verify")
 OTP_TTL_SECONDS = 120
 # در حالت توسعه کد تایید در پاسخ API برگردانده می‌شود

@@ -69,6 +69,11 @@ class ShopProduct(TimeStamped):
     # «تخفیف ویژه»: محصولی که فروشگاه با قیمت اصلی و درصد تخفیف تعریف کرده و در صفحه
     # عمومی «تخفیفات فروشگاه‌ها» نمایش داده می‌شود (پس از تایید اداره صمت)
     is_special = models.BooleanField("تخفیف ویژه", default=False, db_index=True)
+    # موجودی و سقف خرید (فروشگاه ویژه): موجودی به مشتری نمایش داده نمی‌شود؛ فقط وقتی تمام شد خرید بسته می‌شود
+    stock = models.PositiveIntegerField("موجودی انبار", null=True, blank=True,
+                                        help_text="خالی = نامحدود؛ با هر خرید کم می‌شود و با صفر شدن، خرید بسته می‌شود")
+    per_user_limit = models.PositiveSmallIntegerField("سقف خرید هر کاربر", null=True, blank=True,
+                                                      help_text="خالی = بدون سقف؛ حداکثر تعدادی که هر کاربر می‌تواند بخرد")
 
     status = models.CharField("وضعیت تایید", max_length=10, choices=Status.choices,
                               default=Status.PENDING, db_index=True)
@@ -94,6 +99,10 @@ class ShopProduct(TimeStamped):
         return f"{self.name} ({self.store.name})"
 
     @property
+    def sold_out(self) -> bool:
+        return self.stock is not None and self.stock <= 0
+
+    @property
     def is_public(self) -> bool:
         """فقط محصول تاییدشده و فعال به مردم نمایش داده می‌شود."""
         return self.status == self.Status.APPROVED and self.is_active
@@ -105,4 +114,5 @@ class ShopProduct(TimeStamped):
         return round((self.old_price - self.price) / self.old_price * 100)
 
 
+from .commerce import Payment, ShopBundle, ShopBundleItem, UserAddress, Wallet, WalletTx  # noqa: E402,F401
 from .orders import Order, OrderEvent, OrderItem  # noqa: E402,F401  (ثبت مدل‌ها در اپ)

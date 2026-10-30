@@ -64,11 +64,13 @@ class StoreSerializer(serializers.ModelSerializer):
             "id", "name", "union", "union_name", "covered_unions", "covered_union_names",
             "county_name", "license_no", "phone", "address", "lat", "lng",
             "working_hours", "photo", "license_image", "status", "status_display", "status_reason",
-            "is_verified", "rating_avg", "rating_count", "owner_name", "owner_mobile", "offers_count",
-            "created_at", "reviewed_at",
+            "is_verified", "is_featured", "rating_avg", "rating_count", "owner_name", "owner_mobile",
+            "offers_count", "created_at", "reviewed_at",
         ]
+        # فروشگاه ویژه را فقط مدیر کل تعیین می‌کند (در StoreAdminSerializer.validate بررسی می‌شود)
         read_only_fields = [
-            "status", "status_reason", "is_verified", "rating_avg", "rating_count", "created_at", "reviewed_at",
+            "status", "status_reason", "is_verified", "is_featured", "rating_avg", "rating_count", "created_at",
+            "reviewed_at",
         ]
 
     def get_offers_count(self, s):
@@ -83,10 +85,16 @@ class StoreSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """فروشگاه یا عضو یک اتحادیه است، یا فاقد اتحادیه با اتحادیه‌های تحت پوشش."""
+        featured = attrs.get("is_featured", getattr(self.instance, "is_featured", False))
         union = attrs.get("union", getattr(self.instance, "union", None))
         covered = attrs.get("covered_unions")
         if covered is None and self.instance:
             covered = list(self.instance.covered_unions.all())
+        if featured:
+            # فروشگاه ویژه به هیچ اتحادیه‌ای وابسته نیست
+            if union or covered:
+                raise serializers.ValidationError({"union": "فروشگاه ویژه نباید عضو یا تحت پوشش اتحادیه‌ای باشد."})
+            return attrs
         if not union and not covered:
             raise serializers.ValidationError({
                 "covered_unions": "برای فروشگاه فاقد اتحادیه، دست‌کم یک اتحادیه تحت پوشش انتخاب کنید."
@@ -112,9 +120,17 @@ class StoreAdminSerializer(StoreSerializer):
 
     class Meta(StoreSerializer.Meta):
         fields = StoreSerializer.Meta.fields + ["owner_first_name", "owner_last_name", "password"]
+        read_only_fields = [f for f in StoreSerializer.Meta.read_only_fields if f != "is_featured"]
 
     def validate_owner_mobile(self, v):
         return normalize_mobile(v)
+
+    def validate_is_featured(self, v):
+        user = self.context["request"].user
+        current = getattr(self.instance, "is_featured", False)
+        if v != current and user.role != Role.ADMIN:
+            raise serializers.ValidationError("تعیین فروشگاه ویژه فقط بر عهده مدیر کل سامانه است.")
+        return v
 
     def to_representation(self, instance):
         # فیلدهای write_only در خروجی نمی‌آیند؛ مقدار فعلی مالک را دستی برمی‌گردانیم

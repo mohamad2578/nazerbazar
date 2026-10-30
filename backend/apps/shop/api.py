@@ -1,3 +1,5 @@
+import json
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -12,6 +14,7 @@ from apps.core.permissions import role_permission
 from apps.core.views import ScopedModelViewSet
 from apps.orgs.models import Store, stores_in_county
 
+from .commerce import ShopBundle, ShopBundleItem
 from .models import ShopCategory, ShopProduct
 
 # کارشناسانی که نرخ سایر کالاها (کالاهای غیراساسی) را تایید می‌کنند
@@ -33,7 +36,8 @@ class ShopProductSerializer(serializers.ModelSerializer):
     store_name = serializers.CharField(source="store.name", read_only=True)
     discount_percent = serializers.IntegerField(read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
-    union_name = serializers.CharField(source="store.union.name", read_only=True)
+    union_name = serializers.CharField(source="store.union.name", read_only=True, default="")
+    sold_out = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = ShopProduct
@@ -42,8 +46,21 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "price", "old_price", "discount_percent", "unit", "unit_display", "brand",
             "is_available", "is_active", "order", "created_at",
             "status", "status_display", "reviewed_at", "review_note", "is_special",
+            "stock", "per_user_limit", "sold_out",
         ]
         read_only_fields = ["store", "status", "reviewed_at", "review_note"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # موجودی دقیق انبار فقط برای صاحب فروشگاه و مسئولان است؛ مشتری فقط «ناموجود» را می‌بیند
+        user = getattr(self.context.get("request"), "user", None)
+        staff = bool(user and user.is_authenticated and (
+            user.role in (Role.ADMIN, Role.GOVERNORATE, Role.SAMT, Role.CHAMBER, Role.UNION)
+            or instance.store.owner_id == user.pk
+        ))
+        if not staff:
+            data.pop("stock", None)
+        return data
 
     def validate(self, attrs):
         special = attrs.get("is_special", getattr(self.instance, "is_special", False))
@@ -84,9 +101,12 @@ class MyShopProductViewSet(ScopedModelViewSet):
         return store
 
     def perform_create(self, serializer):
-        product = self._save_in_scope(serializer, store=self._my_store(),
-                                      status=ShopProduct.Status.PENDING)
-        self._notify_reviewers(product, "محصول جدید در انتظار تایید")
+        store = self._my_store()
+        # فروشگاه ویژه بدون تایید صمت عرضه می‌کند
+        status = ShopProduct.Status.APPROVED if store.is_featured else ShopProduct.Status.PENDING
+        product = self._save_in_scope(serializer, store=store, status=status)
+        if not store.is_featured:
+            self._notify_reviewers(product, "محصول جدید در انتظار تایید")
 
     def perform_update(self, serializer):
         serializer.validated_data.pop("store", None)
@@ -96,15 +116,19 @@ class MyShopProductViewSet(ScopedModelViewSet):
             f in serializer.validated_data and serializer.validated_data[f] != getattr(instance, f)
             for f in REVIEWABLE_FIELDS
         )
-        extra = {"status": ShopProduct.Status.PENDING, "reviewed_at": None, "review_note": ""} if changed else {}
+        reviewed = changed and not instance.store.is_featured
+        extra = {"status": ShopProduct.Status.PENDING, "reviewed_at": None, "review_note": ""} if reviewed else {}
         product = self._save_in_scope(serializer, **extra)
-        if changed:
+        if reviewed:
             self._notify_reviewers(product, "تغییر قیمت/مشخصات محصول در انتظار تایید")
 
     def _notify_reviewers(self, product: ShopProduct, title: str) -> None:
         from apps.accounts.models import User
 
-        province = product.store.union.chamber.county.province_id
+        union = product.store.union or product.store.covered_unions.first()
+        if not union:
+            return
+        province = union.chamber.county.province_id
         reviewers = User.objects.filter(role=Role.SAMT, province_id=province)
         notify(reviewers, title,
                f"«{product.name}» از فروشگاه {product.store.name} — {product.price:,} ریال",
@@ -264,3 +288,142 @@ def public_special_offers(request):
     paginator = Pagination()
     page = paginator.paginate_queryset(qs.order_by(ordering, "-created_at"), request)
     return paginator.get_paginated_response(SpecialOfferSerializer(page, many=True, context={"request": request}).data)
+
+
+# ───────────────────────── فروشگاه ویژه و بسته‌های پیشنهادی ─────────────────────────
+
+
+class BundleItemSerializer(serializers.Serializer):
+    product = serializers.IntegerField(source="product_id")
+    quantity = serializers.IntegerField(min_value=1, max_value=99, default=1)
+    name = serializers.CharField(source="product.name", read_only=True)
+    image = serializers.SerializerMethodField()
+    price = serializers.IntegerField(source="product.price", read_only=True)
+    list_price = serializers.SerializerMethodField()
+    unit_display = serializers.CharField(source="product.get_unit_display", read_only=True)
+
+    def get_list_price(self, it):
+        return max(it.product.old_price or 0, it.product.price)
+
+    def get_image(self, it):
+        return it.product.image.url if it.product.image else None
+
+
+class ShopBundleSerializer(serializers.ModelSerializer):
+    items = BundleItemSerializer(many=True)
+    items_total = serializers.SerializerMethodField()
+    list_total = serializers.SerializerMethodField()
+    discount_percent = serializers.SerializerMethodField()
+    sold_out = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShopBundle
+        fields = ["id", "store", "title", "description", "image", "price", "order", "is_active",
+                  "items", "items_total", "list_total", "discount_percent", "sold_out"]
+        read_only_fields = ["store"]
+
+    def get_items_total(self, b):
+        return sum(i.product.price * i.quantity for i in b.items.all())
+
+    def get_list_total(self, b):
+        return sum(max(i.product.old_price or 0, i.product.price) * i.quantity for i in b.items.all())
+
+    def get_discount_percent(self, b):
+        total = self.get_items_total(b)
+        return round((total - b.price) / total * 100) if total > b.price else None
+
+    def get_sold_out(self, b):
+        return any(i.product.sold_out or not i.product.is_available or (
+            i.product.stock is not None and i.product.stock < i.quantity) for i in b.items.all())
+
+    def to_internal_value(self, data):
+        # در درخواست multipart (همراه تصویر) اقلام به‌صورت رشته JSON می‌آید
+        raw = data.get("items") if hasattr(data, "get") else None
+        if isinstance(raw, str):
+            try:
+                data = {**{k: data.get(k) for k in data}, "items": json.loads(raw)}
+            except ValueError:
+                raise serializers.ValidationError({"items": "فهرست کالاهای بسته نامعتبر است."})
+        return super().to_internal_value(data)
+
+    def _check_items(self, items):
+        store = self.context["store"]
+        if not items:
+            raise serializers.ValidationError({"items": "دست‌کم یک کالا به بسته اضافه کنید."})
+        ids = [i["product_id"] for i in items]
+        if len(set(ids)) != len(ids):
+            raise serializers.ValidationError({"items": "یک کالا را فقط یک بار در بسته بیاورید."})
+        found = set(ShopProduct.objects.filter(pk__in=ids, store=store).values_list("pk", flat=True))
+        if set(ids) - found:
+            raise serializers.ValidationError({"items": "همه کالاهای بسته باید از همین فروشگاه باشند."})
+
+    def _set_items(self, bundle, items):
+        bundle.items.all().delete()
+        ShopBundleItem.objects.bulk_create(
+            ShopBundleItem(bundle=bundle, product_id=i["product_id"], quantity=i.get("quantity", 1)) for i in items
+        )
+
+    def create(self, validated):
+        items = validated.pop("items", [])
+        self._check_items(items)
+        with transaction.atomic():
+            bundle = ShopBundle.objects.create(store=self.context["store"], **validated)
+            self._set_items(bundle, items)
+        return bundle
+
+    def update(self, instance, validated):
+        items = validated.pop("items", None)
+        if items is not None:
+            self._check_items(items)
+        with transaction.atomic():
+            for k, v in validated.items():
+                setattr(instance, k, v)
+            instance.save()
+            if items is not None:
+                self._set_items(instance, items)
+        return instance
+
+
+class ShopBundleViewSet(ScopedModelViewSet):
+    """مدیریت بسته‌های پیشنهادی توسط فروشگاه."""
+
+    queryset = ShopBundle.objects.select_related("store").prefetch_related("items__product")
+    serializer_class = ShopBundleSerializer
+    read_roles = ("admin", "store")
+    write_roles = ("store",)
+    pagination_class = None
+
+    def _store(self):
+        store = self.request.user.stores.first()
+        if not store or store.status != Store.Status.ACTIVE:
+            raise ValidationError({"detail": "فروشگاه فعالی برای شما ثبت نشده است."})
+        return store
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        if self.request.method in ("POST", "PUT", "PATCH") and self.request.user.role == Role.STORE:
+            ctx["store"] = self.get_object().store if self.kwargs.get("pk") else self._store()
+        return ctx
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_featured_store(request):
+    """فروشگاه ویژه‌ای که دکمه «طرح ویژه تخفیف» صفحه اصلی به آن می‌رود (نبودن = دکمه نمایش داده نشود)."""
+    s = Store.objects.filter(is_featured=True, status=Store.Status.ACTIVE).order_by("-created_at").first()
+    if not s:
+        return Response(None)
+    return Response({"id": s.pk, "name": s.name})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_bundles(request, pk):
+    store = get_object_or_404(Store, pk=pk, status=Store.Status.ACTIVE)
+    qs = store.bundles.filter(is_active=True).prefetch_related("items__product")
+    # بسته‌ای که یکی از کالاهایش دیگر عرضه نمی‌شود، نمایش داده نمی‌شود
+    rows = [b for b in qs if all(i.product.is_public for i in b.items.all())]
+    return Response(ShopBundleSerializer(rows, many=True, context={"request": request}).data)

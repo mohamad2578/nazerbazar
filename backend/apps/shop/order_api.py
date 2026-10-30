@@ -1,14 +1,19 @@
 from django.db.models import Count, Q, Sum
+from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from apps.accounts.models import Role, User
+from apps.core.utils import normalize_mobile
 from apps.core.views import ScopedModelViewSet
 from apps.orgs.models import Store
 
-from . import order_services
+from . import order_services, payments, wallet
+from .commerce import UserAddress, WalletTx
 from .orders import Order
 
 
@@ -17,25 +22,36 @@ class OrderItemSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     unit_display = serializers.CharField(read_only=True)
     price = serializers.IntegerField(read_only=True)
+    list_price = serializers.SerializerMethodField()
+    bundle_name = serializers.CharField(read_only=True)
     quantity = serializers.IntegerField(read_only=True)
     line_total = serializers.IntegerField(read_only=True)
+
+    def get_list_price(self, it):
+        return max(it.list_price, it.price)
 
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     delivery_display = serializers.CharField(source="get_delivery_display", read_only=True)
+    payment_method_display = serializers.CharField(source="get_payment_method_display", read_only=True)
+    payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
     store_name = serializers.CharField(source="store.name", read_only=True)
     store_phone = serializers.CharField(source="store.phone", read_only=True)
     store_address = serializers.CharField(source="store.address", read_only=True)
     events = serializers.SerializerMethodField()
+    list_total = serializers.SerializerMethodField()
+    savings = serializers.SerializerMethodField()
+    payment_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = [
             "id", "code", "store", "store_name", "store_phone", "store_address", "customer_name", "customer_phone",
-            "delivery", "delivery_display", "address", "note", "total", "status", "status_display",
-            "store_note", "created_at", "items", "events",
+            "delivery", "delivery_display", "address", "lat", "lng", "note", "total", "discount", "list_total",
+            "savings", "payment_method", "payment_method_display", "payment_status", "payment_status_display",
+            "status", "status_display", "store_note", "created_at", "items", "events", "payment_url",
         ]
 
     def get_events(self, o):
@@ -43,6 +59,17 @@ class OrderSerializer(serializers.ModelSerializer):
             {"status_display": e.get_status_display(), "note": e.note, "created_at": e.created_at}
             for e in o.events.all()
         ]
+
+    def get_list_total(self, o):
+        """جمع قیمت مصرف‌کننده پیش از هر تخفیف."""
+        return sum(max(i.list_price, i.price) * i.quantity for i in o.items.all())
+
+    def get_savings(self, o):
+        """مجموع تخفیف: اختلاف قیمت مصرف‌کننده با قیمت فروش + تخفیف بسته‌ها."""
+        return self.get_list_total(o) - o.total
+
+    def get_payment_url(self, o):
+        return getattr(o, "payment_url", "")
 
 
 class OrderViewSet(ScopedModelViewSet):
@@ -54,12 +81,14 @@ class OrderViewSet(ScopedModelViewSet):
     read_roles = ("governorate", "samt", "chamber", "union", "store")
     write_roles = ("store",)
     http_method_names = ["get", "post", "head", "options"]
-    filterset_fields = ["status", "store", "delivery"]
+    filterset_fields = ["status", "store", "delivery", "payment_status", "payment_method"]
     search_fields = ["code", "customer_name", "customer_phone"]
 
-    def create(self, request, *args, **kwargs):
-        from rest_framework.exceptions import ValidationError
+    def get_queryset(self):
+        # سفارش پرداخت‌نشده‌ی اینترنتی هنوز سفارش فروشگاه نیست
+        return super().get_queryset().exclude(status=Order.Status.AWAITING_PAYMENT)
 
+    def create(self, request, *args, **kwargs):
         raise ValidationError({"detail": "ثبت سفارش از صفحه فروشگاه در سایت عمومی انجام می‌شود."})
 
     @action(detail=True, methods=["post"])
@@ -68,6 +97,7 @@ class OrderViewSet(ScopedModelViewSet):
         order_services.change_order_status(
             order, request.user, request.data.get("status", ""), (request.data.get("note") or "").strip()
         )
+        order.refresh_from_db()
         return Response(self.get_serializer(order).data)
 
     @action(detail=False)
@@ -84,12 +114,19 @@ class OrderViewSet(ScopedModelViewSet):
         return Response(agg)
 
 
+def _callback_url(request) -> str:
+    return request.build_absolute_uri("/api/public/payments/callback/")
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def place_order(request, pk):
     """ثبت سفارش توسط مشتری از ویترین فروشگاه."""
     store = get_object_or_404(Store, pk=pk)
-    order = order_services.place_order(request.user, store, request.data.get("items") or [], request.data)
+    order = order_services.place_order(
+        request.user, store, request.data.get("items") or [], request.data,
+        bundles=request.data.get("bundles") or [], callback_url=_callback_url(request),
+    )
     return Response(OrderSerializer(order).data, status=201)
 
 
@@ -105,4 +142,129 @@ def my_orders(request):
 def cancel_my_order(request, code):
     order = get_object_or_404(Order, code=code.upper(), customer=request.user)
     order_services.change_order_status(order, request.user, Order.Status.CANCELED, "لغو توسط مشتری")
+    order.refresh_from_db()
     return Response(OrderSerializer(order).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def pay_my_order(request, code):
+    """ادامه پرداخت اینترنتی سفارشی که پرداختش کامل نشده است."""
+    order = get_object_or_404(Order, code=code.upper(), customer=request.user)
+    if order.status != Order.Status.AWAITING_PAYMENT:
+        raise ValidationError({"detail": "این سفارش در انتظار پرداخت نیست."})
+    _, url = payments.start(request.user, order.total, "order", f"{_callback_url(request)}?order={order.code}",
+                            order=order, description=f"سفارش {order.code}")
+    order.payment_url = url
+    return Response(OrderSerializer(order).data)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def payment_callback(request):
+    """بازگشت کاربر از درگاه؛ پرداخت را تایید می‌کند و کاربر را به برنامه برمی‌گرداند."""
+    authority = request.query_params.get("Authority", "")
+    ok = request.query_params.get("Status", "").upper() == "OK"
+    payment = payments.verify(authority, ok) if authority else None
+    paid = bool(payment and payment.status == "paid")
+    if payment and payment.purpose == "wallet":
+        return HttpResponseRedirect(f"/account?wallet={'ok' if paid else 'fail'}")
+    code = payment.order.code if payment and payment.order_id else request.query_params.get("order", "")
+    return HttpResponseRedirect(f"/orders?pay={'ok' if paid else 'fail'}&code={code}")
+
+
+# ───────────────────────── کیف پول ─────────────────────────
+
+
+def _tx(t):
+    return {"id": t.pk, "amount": t.amount, "balance_after": t.balance_after, "kind": t.kind,
+            "kind_display": t.get_kind_display(), "note": t.note, "created_at": t.created_at}
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_wallet(request):
+    w = wallet.get_wallet(request.user)
+    return Response({"balance": w.balance, "txs": [_tx(t) for t in w.txs.all()[:50]]})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def wallet_topup(request):
+    """شارژ کیف پول از درگاه اینترنتی؛ amount به تومان."""
+    try:
+        amount = int(request.data.get("amount")) * 10
+    except (TypeError, ValueError):
+        raise ValidationError({"amount": "مبلغ را به تومان وارد کنید."})
+    if not 10_000 <= amount <= 500_000_000:
+        raise ValidationError({"amount": "مبلغ شارژ باید بین ۱٬۰۰۰ تا ۵۰٬۰۰۰٬۰۰۰ تومان باشد."})
+    _, url = payments.start(request.user, amount, "wallet", _callback_url(request), description="شارژ کیف پول ناظر ۷۲۴")
+    return Response({"payment_url": url})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def wallet_admin_credit(request):
+    """افزایش (یا با مبلغ منفی کاهش) اعتبار کیف پول یک کاربر توسط مدیر کل؛ amount به تومان."""
+    if request.user.role != Role.ADMIN:
+        raise PermissionDenied("این عملیات فقط برای مدیر کل سامانه مجاز است.")
+    user = User.objects.filter(mobile=normalize_mobile(request.data.get("mobile", ""))).first()
+    if not user:
+        raise ValidationError({"mobile": "کاربری با این شماره پیدا نشد."})
+    try:
+        amount = int(request.data.get("amount")) * 10
+    except (TypeError, ValueError):
+        raise ValidationError({"amount": "مبلغ را به تومان وارد کنید."})
+    note = (request.data.get("note") or "اعتبار از طرف مدیر").strip()
+    if amount > 0:
+        w = wallet.credit(user, amount, WalletTx.Kind.ADMIN, note)
+    elif amount < 0:
+        w = wallet.debit(user, -amount, WalletTx.Kind.ADMIN, note)
+    else:
+        raise ValidationError({"amount": "مبلغ نمی‌تواند صفر باشد."})
+    return Response({"mobile": user.mobile, "balance": w.balance})
+
+
+# ───────────────────────── نشانی‌های مشتری ─────────────────────────
+
+
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserAddress
+        fields = ["id", "title", "address", "receiver_phone", "lat", "lng", "is_default"]
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def my_addresses(request):
+    qs = UserAddress.objects.filter(user=request.user)
+    if request.method == "GET":
+        return Response(AddressSerializer(qs, many=True).data)
+    if qs.count() >= 10:
+        raise ValidationError({"detail": "حداکثر ۱۰ نشانی می‌توانید ذخیره کنید."})
+    s = AddressSerializer(data=request.data)
+    s.is_valid(raise_exception=True)
+    obj = s.save(user=request.user, is_default=s.validated_data.get("is_default") or not qs.exists())
+    if obj.is_default:
+        qs.exclude(pk=obj.pk).update(is_default=False)
+    return Response(AddressSerializer(obj).data, status=201)
+
+
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def my_address_detail(request, pk):
+    obj = get_object_or_404(UserAddress, pk=pk, user=request.user)
+    if request.method == "DELETE":
+        was_default = obj.is_default
+        obj.delete()
+        if was_default:
+            nxt = UserAddress.objects.filter(user=request.user).first()
+            if nxt:
+                UserAddress.objects.filter(pk=nxt.pk).update(is_default=True)
+        return Response(status=204)
+    s = AddressSerializer(obj, data=request.data, partial=True)
+    s.is_valid(raise_exception=True)
+    obj = s.save()
+    if obj.is_default:
+        UserAddress.objects.filter(user=request.user).exclude(pk=obj.pk).update(is_default=False)
+    return Response(AddressSerializer(obj).data)

@@ -154,6 +154,11 @@ GHASEDAK_LINE = env("GHASEDAK_LINE", "")
 GHASEDAK_OTP_TEMPLATE = env("GHASEDAK_OTP_TEMPLATE", "")
 GHASEDAK_PRICE_TEMPLATE = env("GHASEDAK_PRICE_TEMPLATE", "")   # قالب پیامک تغییر حداکثر قیمت (param1=فروشگاه، param2=کالا، param3=قیمت)
 KAVENEGAR_OTP_TEMPLATE = env("KAVENEGAR_OTP_TEMPLATE", "verify")
+
+# ─── درگاه پرداخت اینترنتی ─────────────────────────────────
+PAYMENT_BACKEND = env("PAYMENT_BACKEND", "console")  # console (شبیه‌ساز توسعه) | zarinpal
+ZARINPAL_MERCHANT_ID = env("ZARINPAL_MERCHANT_ID", "")
+ZARINPAL_SANDBOX = env_bool("ZARINPAL_SANDBOX", False)
 OTP_TTL_SECONDS = 120
 # در حالت توسعه کد تایید در پاسخ API برگردانده می‌شود
 OTP_ECHO = env_bool("OTP_ECHO", DEBUG)

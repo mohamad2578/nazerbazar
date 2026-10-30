@@ -12,6 +12,7 @@ from apps.core.models import TimeStamped
 
 class Order(TimeStamped):
     class Status(models.TextChoices):
+        AWAITING_PAYMENT = "awaiting_payment", "در انتظار پرداخت"
         NEW = "new", "ثبت شده"
         CONFIRMED = "confirmed", "تایید فروشگاه"
         PREPARING = "preparing", "در حال آماده‌سازی"
@@ -23,7 +24,17 @@ class Order(TimeStamped):
         PICKUP = "pickup", "دریافت حضوری از فروشگاه"
         DELIVERY = "delivery", "ارسال به نشانی مشتری"
 
-    OPEN_STATUSES = (Status.NEW, Status.CONFIRMED, Status.PREPARING, Status.READY)
+    class Payment(models.TextChoices):
+        ONLINE = "online", "پرداخت اینترنتی"
+        CASH = "cash", "پرداخت نقدی هنگام تحویل"
+        WALLET = "wallet", "کیف پول"
+
+    class PaymentStatus(models.TextChoices):
+        UNPAID = "unpaid", "پرداخت‌نشده"
+        PAID = "paid", "پرداخت‌شده"
+        REFUNDED = "refunded", "بازگشت به کیف پول"
+
+    OPEN_STATUSES = (Status.AWAITING_PAYMENT, Status.NEW, Status.CONFIRMED, Status.PREPARING, Status.READY)
 
     code = models.CharField("کد سفارش", max_length=12, unique=True)
     store = models.ForeignKey("orgs.Store", on_delete=models.PROTECT, related_name="orders", verbose_name="فروشگاه")
@@ -36,7 +47,13 @@ class Order(TimeStamped):
     address = models.CharField("نشانی تحویل", max_length=300, blank=True)
     note = models.TextField("توضیحات مشتری", blank=True)
     total = models.PositiveBigIntegerField("مبلغ کل (ریال)", default=0)
-    status = models.CharField("وضعیت", max_length=10, choices=Status.choices, default=Status.NEW, db_index=True)
+    lat = models.DecimalField("عرض جغرافیایی تحویل", max_digits=9, decimal_places=6, null=True, blank=True)
+    lng = models.DecimalField("طول جغرافیایی تحویل", max_digits=9, decimal_places=6, null=True, blank=True)
+    discount = models.PositiveBigIntegerField("تخفیف بسته‌ها (ریال)", default=0)
+    payment_method = models.CharField("روش پرداخت", max_length=10, choices=Payment.choices, default=Payment.CASH)
+    payment_status = models.CharField("وضعیت پرداخت", max_length=10, choices=PaymentStatus.choices,
+                                      default=PaymentStatus.UNPAID, db_index=True)
+    status = models.CharField("وضعیت", max_length=16, choices=Status.choices, default=Status.NEW, db_index=True)
     store_note = models.TextField("پاسخ/یادداشت فروشگاه", blank=True)
     closed_at = models.DateTimeField("زمان بسته شدن", null=True, blank=True)
 
@@ -71,6 +88,8 @@ class OrderItem(models.Model):
     name = models.CharField("نام کالا", max_length=200)
     unit_display = models.CharField("واحد", max_length=30, blank=True)
     price = models.PositiveBigIntegerField("قیمت واحد (ریال)")
+    list_price = models.PositiveBigIntegerField("قیمت مصرف‌کننده (ریال)", default=0)
+    bundle_name = models.CharField("بسته پیشنهادی", max_length=200, blank=True)
     quantity = models.PositiveSmallIntegerField("تعداد", default=1)
 
     class Meta:
@@ -84,7 +103,7 @@ class OrderItem(models.Model):
 
 class OrderEvent(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="events")
-    status = models.CharField(max_length=10, choices=Order.Status.choices)
+    status = models.CharField(max_length=16, choices=Order.Status.choices)
     note = models.CharField(max_length=300, blank=True)
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)

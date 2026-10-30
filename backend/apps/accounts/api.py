@@ -38,7 +38,7 @@ class MeSerializer(serializers.ModelSerializer):
         if not s:
             return None
         return {"id": s.pk, "name": s.name, "status": s.status, "status_display": s.get_status_display(),
-                "status_reason": s.status_reason, "union_name": s.union_display}
+                "status_reason": s.status_reason, "union_name": s.union_display, "is_featured": s.is_featured}
 
     def get_scope_name(self, u):
         target = {"governorate": u.province, "samt": u.province, "chamber": u.chamber, "union": u.union}.get(u.role)

@@ -401,8 +401,10 @@ class OrderTests(Base):
         from apps.shop.models import ShopProduct
 
         self.store = self.stores[0]
-        self.p1 = ShopProduct.objects.create(store=self.store, name="عسل", price=500_000, unit="piece")
-        self.p2 = ShopProduct.objects.create(store=self.store, name="زعفران", price=900_000, unit="g")
+        self.p1 = ShopProduct.objects.create(store=self.store, name="عسل", price=500_000, unit="piece",
+                                                status="approved")
+        self.p2 = ShopProduct.objects.create(store=self.store, name="زعفران", price=900_000, unit="g",
+                                                status="approved")
 
     def _place(self, **extra):
         body = {"items": [{"product": self.p1.pk, "quantity": 2}, {"product": self.p2.pk, "quantity": 1}],
@@ -1390,3 +1392,184 @@ class PriceSmsTemplateTests(Base):
         log = SmsLog.objects.get()
         self.assertTrue(log.ok)
         self.assertIn("65,000 تومان", log.text)
+
+
+class FeaturedShopTests(Base):
+    """فروشگاه ویژه: کالای بدون تایید صمت، موجودی/سقف خرید، بسته پیشنهادی، کیف پول و پرداخت."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from apps.shop.models import ShopProduct
+
+        cls.owner = User.objects.create_user("09125550000", role=Role.STORE)
+        cls.fstore = Store.objects.create(owner=cls.owner, name="ویژه", address="همدان", status=Store.Status.ACTIVE,
+                                          is_featured=True)
+        mk = lambda name, price, **kw: ShopProduct.objects.create(  # noqa: E731
+            store=cls.fstore, name=name, price=price, old_price=kw.pop("old", price * 2), status="approved", **kw)
+        cls.rice = mk("برنج", 1_000_000, stock=10, per_user_limit=3, order=2)
+        cls.oil = mk("روغن", 500_000, stock=5, order=1)
+        cls.buyer = User.objects.create_user("09126660000", first_name="علی", last_name="رضایی")
+
+    def order(self, user=None, items=None, bundles=None, **extra):
+        body = {"items": items if items is not None else [{"product": self.rice.pk, "quantity": 1}],
+                "bundles": bundles or [], **extra}
+        return self.client_for(user or self.buyer).post(f"/api/public/stores/{self.fstore.pk}/order/", body, format="json")
+
+    def test_only_admin_defines_featured_store_without_union(self):
+        body = {"name": "ویژه ۲", "address": "همدان", "is_featured": True, "owner_mobile": "09127770000"}
+        self.assertEqual(self.client_for(self.uni).post("/api/stores/", body, format="json").status_code, 400)
+        r = self.client_for(self.admin).post("/api/stores/", body, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertTrue(r.data["is_featured"])
+        bad = self.client_for(self.admin).post("/api/stores/", {**body, "owner_mobile": "09127770001", "union": self.union.pk},
+                                               format="json")
+        self.assertEqual(bad.status_code, 400)
+
+    def test_store_owner_cannot_make_own_store_featured(self):
+        r = self.client_for(self.stores[0].owner).patch("/api/my-store/", {"is_featured": True}, format="json")
+        self.assertFalse(Store.objects.get(pk=self.stores[0].pk).is_featured, r.data)
+
+    def test_products_auto_approved_and_stock_hidden_from_customers(self):
+        c = self.client_for(self.owner)
+        r = c.post("/api/shop-products/", {"name": "شکر", "price": 100, "old_price": 200, "unit": "kg", "stock": 7,
+                                           "per_user_limit": 2, "is_special": True}, format="json")
+        self.assertEqual((r.status_code, r.data["status"], r.data["stock"]), (201, "approved", 7))
+        pub = APIClient().get(f"/api/public/stores/{self.fstore.pk}/shop/").data
+        self.assertTrue(pub)
+        self.assertNotIn("stock", pub[0])
+        self.assertIn("per_user_limit", pub[0])
+        self.assertEqual(APIClient().get("/api/public/featured-store/").data["id"], self.fstore.pk)
+
+    def test_stock_limit_and_sold_out(self):
+        self.assertEqual(self.order(items=[{"product": self.oil.pk, "quantity": 5}]).status_code, 201)
+        self.oil.refresh_from_db()
+        self.assertEqual((self.oil.stock, self.oil.sold_out), (0, True))
+        r = self.order(items=[{"product": self.oil.pk, "quantity": 1}])
+        self.assertEqual(r.status_code, 400)
+        self.assertTrue(APIClient().get(f"/api/public/stores/{self.fstore.pk}/shop/").data[0]["sold_out"] is True)
+
+    def test_per_user_limit_counts_previous_orders_and_cancel_frees_it(self):
+        first = self.order(items=[{"product": self.rice.pk, "quantity": 2}])
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(self.order(items=[{"product": self.rice.pk, "quantity": 2}]).status_code, 400)
+        other = User.objects.create_user("09126660001")
+        self.assertEqual(self.order(user=other, items=[{"product": self.rice.pk, "quantity": 3}]).status_code, 201)
+        self.client_for(self.buyer).post(f"/api/public/orders/{first.data['code']}/cancel/")
+        self.rice.refresh_from_db()
+        self.assertEqual(self.rice.stock, 10 - 3)            # سفارش لغوشده موجودی را برگرداند
+        self.assertEqual(self.order(items=[{"product": self.rice.pk, "quantity": 3}]).status_code, 201)
+
+    def test_bundle_pricing_savings_and_stock(self):
+        c = self.client_for(self.owner)
+        r = c.post("/api/shop-bundles/", {"title": "بسته", "price": 1_300_000,
+                                          "items": [{"product": self.rice.pk, "quantity": 1}, {"product": self.oil.pk, "quantity": 1}]},
+                   format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data["items_total"], r.data["discount_percent"]), (1_500_000, 13))
+        bundles = APIClient().get(f"/api/public/stores/{self.fstore.pk}/bundles/").data
+        self.assertEqual(len(bundles), 1)
+        o = self.order(items=[], bundles=[{"bundle": r.data["id"], "quantity": 2}])
+        self.assertEqual(o.status_code, 201, o.data)
+        self.assertEqual((o.data["total"], o.data["discount"]), (2_600_000, 400_000))
+        self.assertEqual(o.data["savings"], o.data["list_total"] - 2_600_000)
+        self.assertEqual({i["bundle_name"] for i in o.data["items"]}, {"بسته"})
+        self.rice.refresh_from_db()
+        self.assertEqual(self.rice.stock, 8)
+
+    def test_bundle_from_another_store_rejected(self):
+        c = self.client_for(self.owner)
+        other_product = self.stores[0].shop_products.create(name="x", price=1, status="approved")
+        r = c.post("/api/shop-bundles/", {"title": "b", "price": 1, "items": [{"product": other_product.pk}]}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_wallet_payment_refund_and_admin_credit(self):
+        from apps.shop import wallet
+
+        self.assertEqual(self.order(payment_method="wallet").status_code, 400)       # موجودی ندارد
+        self.assertEqual(self.client_for(self.citizen).post("/api/wallet/admin-credit/", {"mobile": "09126660000", "amount": 5}, format="json").status_code, 403)
+        r = self.client_for(self.admin).post("/api/wallet/admin-credit/", {"mobile": "09126660000", "amount": 500_000}, format="json")
+        self.assertEqual(r.data["balance"], 5_000_000)
+        o = self.order(payment_method="wallet")
+        self.assertEqual((o.status_code, o.data["payment_status"], o.data["status"]), (201, "paid", "new"))
+        self.assertEqual(wallet.get_wallet(self.buyer).balance, 4_000_000)
+        self.client_for(self.buyer).post(f"/api/public/orders/{o.data['code']}/cancel/")
+        self.assertEqual(wallet.get_wallet(self.buyer).balance, 5_000_000)           # بازگشت وجه
+        w = self.client_for(self.buyer).get("/api/wallet/").data
+        self.assertEqual([t["kind"] for t in w["txs"]], ["refund", "order", "admin"])
+
+    def test_online_payment_flow_and_failure_releases_stock(self):
+        o = self.order(items=[{"product": self.oil.pk, "quantity": 2}], payment_method="online")
+        self.assertEqual((o.status_code, o.data["status"]), (201, "awaiting_payment"))
+        self.assertIn("/api/public/payments/callback/", o.data["payment_url"])
+        # هنوز در کارتابل فروشگاه نیست
+        self.assertEqual(self.client_for(self.owner).get("/api/orders/").data["count"], 0)
+        cb = APIClient().get(o.data["payment_url"].split("testserver")[1])
+        self.assertEqual(cb.status_code, 302)
+        self.assertIn("pay=ok", cb["Location"])
+        self.assertEqual(self.client_for(self.owner).get("/api/orders/").data["count"], 1)
+        mine = self.client_for(self.buyer).get("/api/public/orders/mine/").data[0]
+        self.assertEqual((mine["status"], mine["payment_status"]), ("new", "paid"))
+        # بازگشت دوباره از درگاه اثر دوباره ندارد
+        APIClient().get(o.data["payment_url"].split("testserver")[1])
+        self.assertEqual(self.client_for(self.owner).get("/api/orders/").data["count"], 1)
+        # پرداخت ناموفق: سفارش لغو و موجودی آزاد می‌شود
+        before = self.oil.__class__.objects.get(pk=self.oil.pk).stock
+        o2 = self.order(items=[{"product": self.oil.pk, "quantity": 1}], payment_method="online")
+        auth = o2.data["payment_url"].split("Authority=")[1].split("&")[0]
+        APIClient().get(f"/api/public/payments/callback/?Authority={auth}&Status=NOK")
+        self.assertEqual(self.oil.__class__.objects.get(pk=self.oil.pk).stock, before)
+        self.assertEqual(self.client_for(self.buyer).get("/api/public/orders/mine/").data[0]["status"], "canceled")
+
+    def test_unpaid_online_orders_expire_and_free_stock(self):
+        from datetime import timedelta
+
+        from apps.shop.orders import Order
+
+        o = self.order(items=[{"product": self.oil.pk, "quantity": 5}], payment_method="online")
+        Order.objects.filter(code=o.data["code"]).update(created_at=timezone.now() - timedelta(hours=1))
+        self.assertEqual(self.order(user=User.objects.create_user("09126660002"),
+                                    items=[{"product": self.oil.pk, "quantity": 5}]).status_code, 201)
+
+    def test_wallet_topup_via_gateway(self):
+        r = self.client_for(self.buyer).post("/api/wallet/topup/", {"amount": 100_000}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.client_for(self.buyer).post("/api/wallet/topup/", {"amount": 10}, format="json").status_code, 400)
+        cb = APIClient().get(r.data["payment_url"].split("testserver")[1])
+        self.assertIn("wallet=ok", cb["Location"])
+        self.assertEqual(self.client_for(self.buyer).get("/api/wallet/").data["balance"], 1_000_000)
+
+    def test_saved_addresses_and_delivery_snapshot(self):
+        c = self.client_for(self.buyer)
+        a = c.post("/api/my-addresses/", {"title": "خانه", "address": "همدان، بلوار", "lat": "34.800000", "lng": "48.510000"}, format="json")
+        self.assertEqual((a.status_code, a.data["is_default"]), (201, True))
+        self.assertEqual(c.post("/api/my-addresses/", {"title": "کار", "address": "x"}, format="json").data["is_default"], False)
+        self.assertEqual(self.client_for(self.citizen).patch(f"/api/my-addresses/{a.data['id']}/", {"title": "z"}, format="json").status_code, 404)
+        no_addr = self.order(delivery="delivery")
+        self.assertEqual(no_addr.status_code, 400)
+        o = self.order(delivery="delivery", address_id=a.data["id"])
+        self.assertEqual((o.status_code, o.data["address"], o.data["lat"]), (201, "همدان، بلوار", "34.800000"))
+        self.assertEqual(c.delete(f"/api/my-addresses/{a.data['id']}/").status_code, 204)
+        self.assertTrue(c.get("/api/my-addresses/").data[0]["is_default"])      # پیش‌فرض به نشانی بعدی رفت
+
+    def test_seed_command(self):
+        from django.core.management import call_command
+
+        from apps.shop.models import ShopProduct
+
+        ShopProduct.objects.filter(store=self.fstore).delete()
+        call_command("seed_featured_store", mobile="09125550000")
+        self.assertEqual(ShopProduct.objects.filter(store=self.fstore).count(), 8)
+        self.assertEqual(self.fstore.bundles.get().items.count(), 3)
+
+    def test_multipart_bundle_with_json_items_and_unapproved_not_orderable(self):
+        import json
+
+        c = self.client_for(self.owner)
+        r = c.post("/api/shop-bundles/", {"title": "ب", "price": 1, "is_active": "true",
+                                          "items": json.dumps([{"product": self.rice.pk, "quantity": 2}])}, format="multipart")
+        self.assertEqual((r.status_code, r.data["items"][0]["quantity"]), (201, 2), r.data)
+        self.rice.status = "pending"
+        self.rice.save()
+        self.assertEqual(self.order().status_code, 400)           # کالای تاییدنشده قابل سفارش نیست
+        self.assertEqual(APIClient().get(f"/api/public/stores/{self.fstore.pk}/bundles/").data, [])

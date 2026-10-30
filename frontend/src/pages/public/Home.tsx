@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, BadgePercent, ClipboardList, PackageCheck, Search, Store as StoreIcon, Truck, X } from "lucide-react";
+import { ArrowDown, ArrowUp, BadgePercent, ChevronLeft, ClipboardList, Flame, Search, Store as StoreIcon, Truck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Carousel from "../../components/Carousel";
@@ -73,9 +73,10 @@ export default function Home() {
         </div>
       </section>
 
+      {!searching && <PromoButton />}
+
       {!searching && (
-        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-          <QuickLink to="/subsidized" icon={<PackageCheck className="size-5" />} title="کالای تنظیم بازار" sub="سهمیه‌ای و یارانه‌ای" />
+        <section className="grid grid-cols-3 gap-2 sm:gap-3">
           <QuickLink to="/discounts" icon={<BadgePercent className="size-5" />} title="تخفیفات فروشگاه‌ها" sub="پیشنهادهای ویژه" />
           <QuickLink to="/rates" icon={<ClipboardList className="size-5" />} title="نرخ‌نامه اتحادیه‌ها" sub="حداکثر قیمت هر کالا" />
           <QuickLink to="/suppliers" icon={<Truck className="size-5" />} title="ثبت‌نام تامین‌کنندگان" sub="فرم تامین کالا" />
@@ -165,6 +166,32 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     >
       {children}
     </button>
+  );
+}
+
+/** دکمه جلب‌توجه «طرح ویژه تخفیف»؛ به صفحه فروشگاه ویژه می‌رود و اگر فروشگاه ویژه‌ای فعال نباشد نمایش داده نمی‌شود. */
+function PromoButton() {
+  const q = useQuery({
+    queryKey: ["featured-store"],
+    queryFn: () => api.get<{ id: number; name: string } | null>("/public/featured-store/"),
+    staleTime: 300_000,
+  });
+  if (!q.data) return null;
+  return (
+    <Link
+      to={`/s/${q.data.id}`}
+      className="promo-btn relative flex items-center gap-3 overflow-hidden rounded-2xl px-4 py-3.5 text-white shadow-lg sm:px-6 sm:py-4"
+    >
+      <span className="promo-shine pointer-events-none absolute inset-y-0 right-0 w-1/4 bg-white/40 blur-md" aria-hidden />
+      <span className="promo-icon grid size-12 shrink-0 place-items-center rounded-2xl bg-white/25 backdrop-blur-sm">
+        <Flame className="size-7 drop-shadow" />
+      </span>
+      <span className="relative min-w-0 flex-1">
+        <span className="block text-lg font-extrabold leading-6 drop-shadow sm:text-xl">طرح ویژه تخفیف</span>
+        <span className="block truncate text-xs font-medium opacity-95 sm:text-sm">خرید اقلام اساسی با قیمت ویژه و ارسال با پیک — {q.data.name}</span>
+      </span>
+      <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-white/30"><ChevronLeft className="size-5" /></span>
+    </Link>
   );
 }
 

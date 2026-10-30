@@ -134,6 +134,10 @@ class Store(TimeStamped):
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
     is_verified = models.BooleanField("نشان اعتماد", default=False, help_text="احراز هویت کامل توسط اتحادیه")
+    is_featured = models.BooleanField(
+        "فروشگاه ویژه", default=False, db_index=True,
+        help_text="وابسته به هیچ اتحادیه‌ای نیست؛ هر محصولی را بدون تایید صمت عرضه می‌کند و در «طرح ویژه تخفیف» صفحه اصلی می‌آید",
+    )
     rating_avg = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     rating_count = models.PositiveIntegerField(default=0)
 
@@ -155,6 +159,8 @@ class Store(TimeStamped):
 
     @property
     def union_display(self) -> str:
+        if self.is_featured:
+            return "فروشگاه ویژه"
         if self.union_id:
             return self.union.name
         names = [u.name for u in self.covered_unions.all()]

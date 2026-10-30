@@ -452,6 +452,7 @@ def public_store_detail(request, pk):
         "id": s.pk, "name": s.name, "address": s.address, "phone": s.phone, "lat": s.lat, "lng": s.lng,
         "working_hours": s.working_hours, "is_verified": s.is_verified, "rating_avg": s.rating_avg,
         "rating_count": s.rating_count, "union_name": s.union_display, "county_name": _store_county(s),
+        "is_featured": s.is_featured,
         "photo": request.build_absolute_uri(s.photo.url) if s.photo else None,
         "offers": [
             {"product": o.product_id, "name": o.product.name, "unit_display": o.product.get_unit_display(),

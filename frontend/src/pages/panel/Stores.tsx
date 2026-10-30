@@ -15,6 +15,7 @@ type StoreT = {
   status: string; status_display: string; status_reason: string; is_verified: boolean; rating_avg: string; owner_name: string;
   owner_mobile: string; offers_count: number; created_at: string; license_image: string | null; lat: string; lng: string;
   union?: number | null; covered_unions?: number[]; covered_union_names?: string[]; working_hours?: string;
+  is_featured?: boolean;
 };
 
 /** نقش‌هایی که اجازه تعریف و مدیریت فروشگاه دارند. */
@@ -135,7 +136,7 @@ function StoreSheet({ store, canManage, canActAs, onClose }: { store: StoreT; ca
       <dl className="grid grid-cols-2 gap-3 text-sm">
         <Info label="مالک" value={store.owner_name || "—"} />
         <Info label="موبایل" value={<a href={telLink(store.owner_mobile)} className="text-brand" dir="ltr">{store.owner_mobile}</a>} />
-        <Info label="اتحادیه" value={store.union_name} />
+        <Info label="اتحادیه" value={store.is_featured ? <Badge tone="brand">فروشگاه ویژه</Badge> : store.union_name} />
         <Info label="پروانه کسب" value={store.license_no || "—"} />
         <Info label="تلفن" value={store.phone ? <a href={telLink(store.phone)} className="inline-flex items-center gap-1 text-brand"><Phone className="size-3" />{store.phone}</a> : "—"} />
         <Info label="وضعیت" value={<Badge tone={STATUS_TONE[store.status]}>{store.status_display}</Badge>} />
@@ -222,8 +223,11 @@ function StoreForm({ store, onClose }: { store?: StoreT; onClose: () => void }) 
   }));
   // «فاقد اتحادیه» برای فروشگاه‌های زنجیره‌ای، جهاد، حامی و مانند آن‌ها
   const NONE = "none";
+  // «فروشگاه ویژه» را فقط مدیر کل تعریف می‌کند؛ وابسته به هیچ اتحادیه‌ای نیست و محصولاتش بدون تایید صمت نمایش داده می‌شود
+  const FEATURED = "featured";
+  const isAdmin = useAuth().user!.role === "admin";
   const [union, setUnion] = useState<string>(() =>
-    store ? (store.union ? String(store.union) : store.covered_unions?.length ? NONE : "") : "");
+    store ? (store.is_featured ? FEATURED : store.union ? String(store.union) : store.covered_unions?.length ? NONE : "") : "");
   const [covered, setCovered] = useState<number[]>(() => store?.covered_unions ?? []);
   const toggleCovered = (id: number) =>
     setCovered((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
@@ -231,8 +235,9 @@ function StoreForm({ store, onClose }: { store?: StoreT; onClose: () => void }) 
   const m = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = { ...f };
-      body.union = union === NONE || !union ? null : Number(union);
+      body.union = union === NONE || union === FEATURED || !union ? null : Number(union);
       body.covered_unions = union === NONE ? covered : [];
+      if (isAdmin) body.is_featured = union === FEATURED;
       if (!body.password) delete body.password;
       if (store) { delete body.owner_first_name; delete body.owner_last_name; }
       return store ? api.patch(`/stores/${store.id}/`, body) : api.post("/stores/", body);
@@ -256,6 +261,7 @@ function StoreForm({ store, onClose }: { store?: StoreT; onClose: () => void }) 
             <option value="">—</option>
             {(unions.data?.results ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}{u.chamber_name ? ` (${u.chamber_name})` : ""}</option>)}
             <option value={NONE}>فاقد اتحادیه (زنجیره‌ای، جهاد، حامی و …)</option>
+            {(isAdmin || store?.is_featured) && <option value={FEATURED}>فروشگاه ویژه (طرح ویژه تخفیف)</option>}
           </Select>
         </Field>
         <Field label="شماره پروانه کسب" error={err.license_no}><Input value={f.license_no} onChange={set("license_no")} dir="ltr" /></Field>
@@ -264,6 +270,12 @@ function StoreForm({ store, onClose }: { store?: StoreT; onClose: () => void }) 
         <Field label="ساعت کاری" error={err.working_hours} className="sm:col-span-2"><Input value={f.working_hours} onChange={set("working_hours")} placeholder="مثلا ۸ تا ۲۲" /></Field>
       </div>
 
+      {union === FEATURED && (
+        <p className="mt-4 rounded-xl bg-brand-soft p-3 text-xs leading-6 text-brand">
+          فروشگاه ویژه عضو هیچ اتحادیه‌ای نیست؛ مالک آن هر محصولی را بدون تایید اداره صمت عرضه می‌کند و با موجودی، سقف خرید و
+          بسته پیشنهادی در دکمه «طرح ویژه تخفیف» صفحه اصلی سایت نمایش داده می‌شود.
+        </p>
+      )}
       {union === NONE && (
         <div className="mt-4 rounded-2xl border border-line bg-surface-2 p-4">
           <h3 className="text-sm font-semibold">کالاهای کدام اتحادیه‌ها به این فروشگاه نمایش داده شود؟</h3>

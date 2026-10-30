@@ -45,6 +45,7 @@ router.register("shares", distribution.ShareViewSet, basename="share")
 router.register("quotas", distribution.QuotaViewSet, basename="quota")
 router.register("shop-categories", shop.ShopCategoryViewSet, basename="shop-category")
 router.register("shop-products", shop.MyShopProductViewSet, basename="shop-product")
+router.register("shop-bundles", shop.ShopBundleViewSet, basename="shop-bundle")
 router.register("other-prices", shop.ShopPriceReviewViewSet, basename="other-price")
 router.register("orders", orders.OrderViewSet, basename="order")
 router.register("public/geo", orgs.PublicGeoViewSet, basename="public-geo")
@@ -77,6 +78,15 @@ api = [
     path("store/shop-summary/", shop.my_shop_summary),
     path("public/stores/<int:pk>/order/", orders.place_order),
     path("public/orders/mine/", orders.my_orders),
+    path("public/orders/<str:code>/pay/", orders.pay_my_order),
+    path("public/payments/callback/", orders.payment_callback),
+    path("public/featured-store/", shop.public_featured_store),
+    path("public/stores/<int:pk>/bundles/", shop.public_bundles),
+    path("wallet/", orders.my_wallet),
+    path("wallet/topup/", orders.wallet_topup),
+    path("wallet/admin-credit/", orders.wallet_admin_credit),
+    path("my-addresses/", orders.my_addresses),
+    path("my-addresses/<int:pk>/", orders.my_address_detail),
     path("public/orders/<str:code>/cancel/", orders.cancel_my_order),
     path("public/map/", market.public_map),
     path("public/observatory/", observatory.public_observatory),

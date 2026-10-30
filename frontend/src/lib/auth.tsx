@@ -15,7 +15,7 @@ export type Me = {
   chamber: number | null;
   union: number | null;
   scope_name: string;
-  store: null | { id: number; name: string; status: string; status_display: string; status_reason: string; union_name: string };
+  store: null | { id: number; name: string; status: string; status_display: string; status_reason: string; union_name: string; is_featured?: boolean };
 };
 
 type Ctx = {

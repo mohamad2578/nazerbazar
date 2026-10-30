@@ -7,12 +7,13 @@ import Directions from "../../components/Directions";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, num, telLink, toman } from "../../lib/format";
+import FeaturedStorefront from "./FeaturedStorefront";
 
 const MapView = lazy(() => import("../../components/MapView"));
 
 type StoreDetailT = {
   id: number; name: string; address: string; phone: string; lat: string | null; lng: string | null; working_hours: string;
-  is_verified: boolean; rating_avg: string; rating_count: number; union_name: string; county_name: string; photo: string | null;
+  is_verified: boolean; is_featured?: boolean; rating_avg: string; rating_count: number; union_name: string; county_name: string; photo: string | null;
   offers: { product: number; name: string; unit_display: string; price: number; official_price: number; discount_percent: number }[];
   reviews: { id: number; rating: number; comment: string; user_name: string; created_at: string }[];
 };
@@ -40,7 +41,9 @@ export default function StoreDetail() {
               <h1 className="flex items-center gap-1.5 text-lg font-bold">
                 {s.name} {s.is_verified && <BadgeCheck className="size-5 text-brand" />}
               </h1>
-              <p className="mt-0.5 text-sm text-muted">عضو {s.union_name} · {s.county_name}</p>
+              <p className="mt-0.5 text-sm text-muted">
+                {s.is_featured ? <Badge tone="danger">فروشگاه ویژه · طرح ویژه تخفیف</Badge> : <>عضو {s.union_name} · {s.county_name}</>}
+              </p>
             </div>
             {s.rating_count > 0 && (
               <div className="text-center">
@@ -67,6 +70,7 @@ export default function StoreDetail() {
         </div>
       </Card>
 
+      {s.is_featured ? <FeaturedStorefront storeId={s.id} storeName={s.name} /> : (<>
       <section>
         <h2 className="mb-1 font-semibold">کالاهای اساسی با حداکثر قیمت</h2>
         <p className="mb-3 text-xs text-muted">نرخ این کالاها را اتحادیه تعیین می‌کند و فروشگاه حداکثر تا ۲۰٪ زیر آن می‌تواند بفروشد.</p>
@@ -88,6 +92,7 @@ export default function StoreDetail() {
       </section>
 
       <ShopSection storeId={s.id} storeName={s.name} />
+      </>)}
 
       <section>
         <div className="mb-3 flex items-center justify-between">

@@ -1,22 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MapPin, Package, Phone, ShoppingCart, User } from "lucide-react";
+import { CreditCard, MapPin, Package, Phone, Printer, ShoppingCart, User } from "lucide-react";
 import { useState } from "react";
 import { Badge, Button, Card, Empty, Field, Loading, PageHeader, Segmented, Sheet, Stat, Textarea, useToast } from "../../components/ui";
 import { api, type Page } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { ago, dateTime, num, telLink, toman } from "../../lib/format";
-
-type OrderT = {
-  id: number; code: string; store_name: string; customer_name: string; customer_phone: string;
-  delivery: string; delivery_display: string; address: string; note: string; total: number;
-  status: string; status_display: string; store_note: string; created_at: string;
-  items: { name: string; unit_display: string; price: number; quantity: number; line_total: number }[];
-  events: { status_display: string; note: string; created_at: string }[];
-};
-
-const ORDER_TONE: Record<string, "neutral" | "brand" | "ok" | "warn" | "danger"> = {
-  new: "warn", confirmed: "brand", preparing: "brand", ready: "ok", delivered: "neutral", canceled: "danger",
-};
+import { ago, dateTime, num, telLink, toman, webMapLink } from "../../lib/format";
+import { ORDER_TONE, PAY_TONE, printInvoice, type OrderT } from "../../lib/orders";
 
 /** اقدام بعدی مجاز فروشنده در هر وضعیت */
 const NEXT: Record<string, { status: string; label: string }[]> = {
@@ -72,6 +61,7 @@ export default function Orders() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium" dir="ltr">{o.code}</span>
                     <Badge tone={ORDER_TONE[o.status]}>{o.status_display}</Badge>
+                    <Badge tone={PAY_TONE[o.payment_status]}>{o.payment_method_display} · {o.payment_status_display}</Badge>
                   </div>
                   <div className="mt-1 truncate text-sm text-muted">
                     {o.customer_name} · {num(o.items.length)} قلم · {o.delivery_display}
@@ -120,7 +110,16 @@ function OrderSheet({ order, canAct, onClose }: { order: OrderT; canAct: boolean
         </p>
         <p className="flex items-start gap-1.5">
           <MapPin className="mt-0.5 size-4 shrink-0 text-muted" />
-          <span>{order.delivery_display}{order.address && ` — ${order.address}`}</span>
+          <span>
+            {order.delivery_display}{order.address && ` — ${order.address}`}
+            {order.lat && order.lng && (
+              <a href={webMapLink(order.lat, order.lng)} target="_blank" rel="noreferrer" className="mr-2 text-brand underline">موقعیت روی نقشه برای پیک</a>
+            )}
+          </span>
+        </p>
+        <p className="flex items-center gap-1.5">
+          <CreditCard className="size-4 text-muted" />
+          <span>{order.payment_method_display} — <Badge tone={PAY_TONE[order.payment_status]}>{order.payment_status_display}</Badge></span>
         </p>
         {order.note && <p className="pt-1 text-muted">یادداشت مشتری: {order.note}</p>}
       </div>
@@ -130,16 +129,28 @@ function OrderSheet({ order, canAct, onClose }: { order: OrderT; canAct: boolean
           <div key={i} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
             <div className="min-w-0">
               <div className="truncate">{it.name}</div>
-              <div className="text-xs text-muted">{toman(it.price)} × {num(it.quantity)} {it.unit_display}</div>
+              <div className="text-xs text-muted">
+                {toman(it.price)} × {num(it.quantity)} {it.unit_display}
+                {it.bundle_name && <span className="text-brand"> · بسته «{it.bundle_name}»</span>}
+              </div>
             </div>
             <b className="shrink-0 tabular">{toman(it.line_total)}</b>
           </div>
         ))}
+        {order.savings > 0 && (
+          <div className="flex items-center justify-between px-3 py-2 text-sm text-ok">
+            <span>تخفیف به مشتری</span>
+            <b className="tabular">{toman(order.savings)}</b>
+          </div>
+        )}
         <div className="flex items-center justify-between px-3 py-2.5">
           <span className="text-sm font-medium">مبلغ کل</span>
           <b className="tabular">{toman(order.total)}</b>
         </div>
       </div>
+      <Button className="mt-3 w-full" variant="secondary" icon={<Printer className="size-4" />} onClick={() => printInvoice(order) || toast("اجازه باز شدن پنجره جدید را بدهید", "danger")}>
+        چاپ فاکتور
+      </Button>
 
       {canAct && actions.length > 0 && (
         <div className="mt-5 space-y-3 border-t border-line pt-4">

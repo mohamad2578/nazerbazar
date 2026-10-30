@@ -1413,7 +1413,8 @@ class FeaturedShopTests(Base):
 
     def order(self, user=None, items=None, bundles=None, **extra):
         body = {"items": items if items is not None else [{"product": self.rice.pk, "quantity": 1}],
-                "bundles": bundles or [], **extra}
+                "bundles": bundles or [], "delivery": "delivery", "address": "همدان، بلوار",
+                "payment_method": "online", **extra}
         return self.client_for(user or self.buyer).post(f"/api/public/stores/{self.fstore.pk}/order/", body, format="json")
 
     def test_only_admin_defines_featured_store_without_union(self):
@@ -1486,11 +1487,21 @@ class FeaturedShopTests(Base):
     def test_wallet_payment_refund_and_admin_credit(self):
         from apps.shop import wallet
 
-        self.assertEqual(self.order(payment_method="wallet").status_code, 400)       # موجودی ندارد
+        from apps.shop.models import ShopProduct
+
+        shop = self.stores[0]
+        item = ShopProduct.objects.create(store=shop, name="عسل", price=1_000_000, status="approved")
+
+        def buy(**kw):
+            return self.client_for(self.buyer).post(
+                f"/api/public/stores/{shop.pk}/order/",
+                {"items": [{"product": item.pk, "quantity": 1}], "payment_method": "wallet", **kw}, format="json")
+
+        self.assertEqual(buy().status_code, 400)                                      # موجودی ندارد
         self.assertEqual(self.client_for(self.citizen).post("/api/wallet/admin-credit/", {"mobile": "09126660000", "amount": 5}, format="json").status_code, 403)
         r = self.client_for(self.admin).post("/api/wallet/admin-credit/", {"mobile": "09126660000", "amount": 500_000}, format="json")
         self.assertEqual(r.data["balance"], 5_000_000)
-        o = self.order(payment_method="wallet")
+        o = buy()
         self.assertEqual((o.status_code, o.data["payment_status"], o.data["status"]), (201, "paid", "new"))
         self.assertEqual(wallet.get_wallet(self.buyer).balance, 4_000_000)
         self.client_for(self.buyer).post(f"/api/public/orders/{o.data['code']}/cancel/")
@@ -1545,7 +1556,7 @@ class FeaturedShopTests(Base):
         self.assertEqual((a.status_code, a.data["is_default"]), (201, True))
         self.assertEqual(c.post("/api/my-addresses/", {"title": "کار", "address": "x"}, format="json").data["is_default"], False)
         self.assertEqual(self.client_for(self.citizen).patch(f"/api/my-addresses/{a.data['id']}/", {"title": "z"}, format="json").status_code, 404)
-        no_addr = self.order(delivery="delivery")
+        no_addr = self.order(delivery="delivery", address="")
         self.assertEqual(no_addr.status_code, 400)
         o = self.order(delivery="delivery", address_id=a.data["id"])
         self.assertEqual((o.status_code, o.data["address"], o.data["lat"]), (201, "همدان، بلوار", "34.800000"))
@@ -1573,6 +1584,11 @@ class FeaturedShopTests(Base):
         self.rice.save()
         self.assertEqual(self.order().status_code, 400)           # کالای تاییدنشده قابل سفارش نیست
         self.assertEqual(APIClient().get(f"/api/public/stores/{self.fstore.pk}/bundles/").data, [])
+
+    def test_featured_store_accepts_only_online_payment_and_courier_delivery(self):
+        for extra in ({"payment_method": "cash"}, {"payment_method": "wallet"}, {"delivery": "pickup"}):
+            self.assertEqual(self.order(**extra).status_code, 400, extra)
+        self.assertEqual(self.order().status_code, 201)
 
 
 class CourierTests(Base):

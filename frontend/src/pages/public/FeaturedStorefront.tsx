@@ -105,7 +105,7 @@ export default function FeaturedStorefront({ storeId, storeName }: { storeId: nu
         </section>
       )}
 
-      <section>
+      <section id="featured-shop" className="scroll-mt-20">
         <div className="mb-3 flex items-center gap-2">
           <Flame className="size-5 text-danger" />
           <h2 className="font-semibold">کالاهای طرح ویژه</h2>
@@ -113,31 +113,31 @@ export default function FeaturedStorefront({ storeId, storeName }: { storeId: nu
         {!items.length ? (
           <Card><p className="p-6 text-center text-sm text-muted">هنوز کالایی ثبت نشده است.</p></Card>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             {items.map((p) => {
               const out = p.sold_out || !p.is_available;
               const qty = cart[`p${p.id}`] ?? 0;
               const reached = p.per_user_limit != null && qty >= p.per_user_limit;
               return (
-                <Card key={p.id} className={cx("flex flex-col overflow-hidden", out && "opacity-70")}>
-                  <div className="relative aspect-square bg-surface-2">
+                <Card key={p.id} className={cx("flex gap-3 p-3", out && "opacity-70")}>
+                  <div className="relative size-24 shrink-0 overflow-hidden rounded-xl bg-surface-2 sm:size-28">
                     {p.image
-                      ? <img src={p.image} alt="" loading="lazy" className="size-full object-contain p-2" />
-                      : <span className="grid size-full place-items-center text-muted"><Package className="size-9" /></span>}
-                    {p.discount_percent ? <Badge tone="danger" className="absolute right-2 top-2">{num(p.discount_percent)}٪ تخفیف</Badge> : null}
-                    {out && <div className="absolute inset-0 grid place-items-center bg-surface/70 text-sm font-bold text-muted">ناموجود</div>}
+                      ? <img src={p.image} alt="" loading="lazy" className="size-full object-contain p-1.5" />
+                      : <span className="grid size-full place-items-center text-muted"><Package className="size-8" /></span>}
+                    {p.discount_percent ? <Badge tone="danger" className="absolute right-1 top-1 !px-1.5 text-[10px]">{num(p.discount_percent)}٪</Badge> : null}
+                    {out && <div className="absolute inset-0 grid place-items-center bg-surface/75 text-xs font-bold text-muted">ناموجود</div>}
                   </div>
-                  <div className="flex flex-1 flex-col p-3">
-                    <div className="line-clamp-2 min-h-10 text-sm font-medium leading-5">{p.name}</div>
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <div className="line-clamp-2 text-sm font-semibold leading-5">{p.name}</div>
                     <div className="mt-0.5 truncate text-[11px] text-muted">{[p.brand, `هر ${p.unit_display}`].filter(Boolean).join(" · ")}</div>
-                    <div className="mt-2">
+                    <div className="mt-1.5">
                       {p.old_price && p.old_price > p.price && (
-                        <div className="text-[11px] text-muted"><span>قیمت مصرف‌کننده: </span><s className="tabular">{toman(p.old_price, false)}</s></div>
+                        <div className="text-[11px] text-muted">قیمت مصرف‌کننده: <s className="tabular">{toman(p.old_price, false)}</s></div>
                       )}
                       <div className="font-bold tabular text-ok">{toman(p.price)}</div>
                     </div>
-                    {p.per_user_limit != null && <div className="mt-1 text-[10px] text-warn">حداکثر {num(p.per_user_limit)} عدد برای هر نفر</div>}
-                    <div className="mt-auto pt-2.5">
+                    {p.per_user_limit != null && <div className="mt-0.5 text-[10px] text-warn">حداکثر {num(p.per_user_limit)} عدد برای هر نفر</div>}
+                    <div className="mt-auto pt-2">
                       {out ? (
                         <div className="grid h-9 place-items-center rounded-xl bg-surface-2 text-xs text-muted">ناموجود</div>
                       ) : qty ? (
@@ -156,7 +156,7 @@ export default function FeaturedStorefront({ storeId, storeName }: { storeId: nu
         )}
       </section>
 
-      <ShopCart storeId={storeId} storeName={storeName} lines={lines} setQty={setQty} clear={() => setCart({})} listTotal={listTotal} />
+      <ShopCart featured storeId={storeId} storeName={storeName} lines={lines} setQty={setQty} clear={() => setCart({})} listTotal={listTotal} />
       {!!lines.length && <div className="h-16" />}
     </div>
   );

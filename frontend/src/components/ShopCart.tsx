@@ -23,7 +23,7 @@ const PAYMENTS = [
 
 /** نوار شناور سبد خرید + فرم نهایی‌سازی سفارش برای ویترین یک فروشگاه. */
 export default function ShopCart({
-  storeId, storeName, lines, setQty, clear, listTotal,
+  storeId, storeName, lines, setQty, clear, listTotal, featured,
 }: {
   storeId: number;
   storeName: string;
@@ -32,6 +32,8 @@ export default function ShopCart({
   clear: () => void;
   /** جمع قیمت مصرف‌کننده برای نمایش میزان صرفه‌جویی (اختیاری) */
   listTotal?: number;
+  /** فروشگاه ویژه: فقط پرداخت اینترنتی و ارسال با پیک */
+  featured?: boolean;
 }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -41,13 +43,13 @@ export default function ShopCart({
   const [f, setF] = useState({
     customer_name: user ? `${user.first_name} ${user.last_name}`.trim() : "",
     customer_phone: user?.mobile ?? "",
-    delivery: "pickup",
+    delivery: featured ? "delivery" : "pickup",
     payment_method: "online",
     note: "",
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
-  const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => api.get<{ balance: number }>("/wallet/"), enabled: !!user && open });
+  const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => api.get<{ balance: number }>("/wallet/"), enabled: !!user && open && !featured });
   const count = lines.reduce((s, l) => s + l.qty, 0);
   const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
   const saving = listTotal && listTotal > total ? listTotal - total : 0;
@@ -164,7 +166,7 @@ export default function ShopCart({
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Field label="نام و نام خانوادگی" error={err.customer_name}><Input value={f.customer_name} onChange={set("customer_name")} /></Field>
             <Field label="تلفن تماس" error={err.customer_phone}><Input value={f.customer_phone} onChange={set("customer_phone")} inputMode="tel" dir="ltr" className="text-left" /></Field>
-            <Field label="نحوه تحویل" className="sm:col-span-2">
+            {!featured && <Field label="نحوه تحویل" className="sm:col-span-2">
               <div className="grid grid-cols-2 gap-2">
                 {[["pickup", "حضوری از فروشگاه"], ["delivery", "ارسال با پیک"]].map(([v, l]) => (
                   <button
@@ -177,7 +179,7 @@ export default function ShopCart({
                   </button>
                 ))}
               </div>
-            </Field>
+            </Field>}
             {f.delivery === "delivery" && (
               <div className="sm:col-span-2">
                 <div className="mb-1.5 text-sm font-medium">نشانی تحویل</div>
@@ -185,6 +187,12 @@ export default function ShopCart({
                 {err.address && <p className="mt-1 text-xs text-danger">{err.address}</p>}
               </div>
             )}
+            {featured ? (
+              <div className="flex items-center gap-2 rounded-xl bg-brand-soft p-3 text-xs leading-6 text-brand sm:col-span-2">
+                <CreditCard className="size-5 shrink-0" />
+                <span>سفارش‌های طرح ویژه با <b>پیک</b> ارسال می‌شود و پرداخت فقط به‌صورت <b>اینترنتی</b> (درگاه بانکی) است.</span>
+              </div>
+            ) : (
             <Field label="روش پرداخت" className="sm:col-span-2" error={err.payment_method}>
               <div className="grid grid-cols-3 gap-2">
                 {PAYMENTS.map(({ value, label, sub, icon: Icon }) => (
@@ -206,6 +214,7 @@ export default function ShopCart({
                 </p>
               )}
             </Field>
+            )}
             <Field label="توضیحات (اختیاری)" className="sm:col-span-2">
               <Textarea value={f.note} onChange={set("note")} className="min-h-16" />
             </Field>

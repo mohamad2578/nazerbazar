@@ -30,7 +30,7 @@ export default function StoreDetail() {
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
-        {s.lat && s.lng && (
+        {!s.is_featured && s.lat && s.lng && (
           <Suspense fallback={<div className="h-40 bg-surface-2" />}>
             <MapView height={170} points={[{ id: s.id, lat: s.lat, lng: s.lng, title: s.name }]} />
           </Suspense>
@@ -58,6 +58,14 @@ export default function StoreDetail() {
             <p className="flex items-start gap-1.5"><MapPin className="mt-0.5 size-4 shrink-0" /> {s.address}</p>
             {s.working_hours && <p className="flex items-center gap-1.5"><Clock className="size-4" /> {s.working_hours}</p>}
           </div>
+          {s.is_featured ? (
+            <button
+              onClick={() => document.getElementById("featured-shop")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-base font-medium text-brand-ink shadow-md active:scale-[.98]"
+            >
+              <ShoppingBag className="size-5" /> مشاهده کالا و خرید
+            </button>
+          ) : (
           <div className="mt-4 grid grid-cols-3 gap-2">
             <a href={telLink(s.phone)} className={cx("inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-brand text-sm text-brand-ink", !s.phone && "pointer-events-none opacity-40")}>
               <Phone className="size-4" /> تماس
@@ -67,6 +75,7 @@ export default function StoreDetail() {
               <ShieldAlert className="size-4" /> گزارش
             </Link>
           </div>
+          )}
         </div>
       </Card>
 

@@ -100,6 +100,12 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
     method = data.get("payment_method") or Order.Payment.CASH
     if method not in Order.Payment.values:
         raise ValidationError({"payment_method": "روش پرداخت نامعتبر است."})
+    if store.is_featured:
+        # فروشگاه ویژه فقط با پرداخت اینترنتی و ارسال با پیک می‌فروشد
+        if method != Order.Payment.ONLINE:
+            raise ValidationError({"payment_method": "خرید از فروشگاه ویژه فقط با پرداخت اینترنتی انجام می‌شود."})
+        if delivery != Order.Delivery.DELIVERY:
+            raise ValidationError({"delivery": "سفارش‌های فروشگاه ویژه فقط با پیک ارسال می‌شود."})
 
     order = Order.objects.create(
         code=tracking_code("S"), store=store, customer=customer,

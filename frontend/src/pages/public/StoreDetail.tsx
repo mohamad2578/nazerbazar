@@ -7,7 +7,6 @@ import Directions from "../../components/Directions";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, num, telLink, toman } from "../../lib/format";
-import FeaturedStorefront from "./FeaturedStorefront";
 
 const MapView = lazy(() => import("../../components/MapView"));
 
@@ -60,7 +59,7 @@ export default function StoreDetail() {
           </div>
           {s.is_featured ? (
             <button
-              onClick={() => document.getElementById("featured-shop")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              onClick={() => nav(`/s/${s.id}/shop`)}
               className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-base font-medium text-brand-ink shadow-md active:scale-[.98]"
             >
               <ShoppingBag className="size-5" /> مشاهده کالا و خرید
@@ -79,7 +78,7 @@ export default function StoreDetail() {
         </div>
       </Card>
 
-      {s.is_featured ? <FeaturedStorefront storeId={s.id} storeName={s.name} /> : (<>
+      {s.is_featured ? null : (<>
       <section>
         <h2 className="mb-1 font-semibold">کالاهای اساسی با حداکثر قیمت</h2>
         <p className="mb-3 text-xs text-muted">نرخ این کالاها را اتحادیه تعیین می‌کند و فروشگاه حداکثر تا ۲۰٪ زیر آن می‌تواند بفروشد.</p>
@@ -103,7 +102,7 @@ export default function StoreDetail() {
       <ShopSection storeId={s.id} storeName={s.name} />
       </>)}
 
-      <section>
+      {!s.is_featured && <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-semibold">نظرات خریداران</h2>
           <Button size="sm" variant="soft" onClick={() => (user ? setReviewOpen(true) : nav(`/login?next=/s/${s.id}`))}>
@@ -123,7 +122,7 @@ export default function StoreDetail() {
           ))}
           {!s.reviews.length && <p className="text-sm text-muted">هنوز نظری ثبت نشده است.</p>}
         </div>
-      </section>
+      </section>}
       <ReviewSheet open={reviewOpen} onClose={() => setReviewOpen(false)} storeId={s.id} />
     </div>
   );

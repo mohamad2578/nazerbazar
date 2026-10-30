@@ -51,7 +51,7 @@ export default function AddressBook({ selected, onSelect }: { selected?: number 
               <div className="flex items-center gap-1.5 font-medium">
                 {a.title}
                 {a.is_default && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] text-muted">پیش‌فرض</span>}
-                {a.lat && <span className="text-[10px] text-ok">موقعیت روی نقشه ✓</span>}
+                {a.lat ? <span className="text-[10px] text-ok">موقعیت روی نقشه ✓</span> : <span className="text-[10px] text-danger">بدون موقعیت نقشه</span>}
               </div>
               <div className="mt-0.5 leading-6 text-muted">{a.address}</div>
               {a.receiver_phone && <div className="text-xs text-muted" dir="ltr">{a.receiver_phone}</div>}
@@ -102,14 +102,14 @@ function AddressForm({ onDone }: { onDone: (a?: Address) => void }) {
         <Field label="تلفن تحویل‌گیرنده (اختیاری)" error={err.receiver_phone}><Input value={f.receiver_phone} onChange={set("receiver_phone")} dir="ltr" inputMode="tel" className="text-left" /></Field>
         <Field label="نشانی کامل" error={err.address} className="sm:col-span-2"><Textarea value={f.address} onChange={set("address")} className="min-h-16" placeholder="شهر، خیابان، کوچه، پلاک، واحد" /></Field>
       </div>
-      <Field label="موقعیت روی نقشه (برای پیدا کردن آدرس توسط پیک)" hint="روی نقطه دقیق بزنید یا از موقعیت فعلی استفاده کنید.">
+      <Field label="موقعیت روی نقشه (الزامی؛ برای پیدا کردن آدرس توسط پیک)" hint={loc ? "موقعیت ثبت شد؛ برای جابه‌جایی روی نقطه دیگر نقشه بزنید." : "روی نقطه دقیق نقشه بزنید یا «موقعیت فعلی من» را بزنید."}>
         <Suspense fallback={<Loading />}>
           <LocationPicker value={loc} onChange={setLoc} height={180} />
         </Suspense>
       </Field>
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="soft" icon={<LocateFixed className="size-4" />} loading={geo.asking} onClick={geo.ask}>موقعیت فعلی من</Button>
-        <Button type="button" size="sm" loading={m.isPending} disabled={!f.title.trim() || !f.address.trim()} onClick={() => m.mutate()}>ذخیره نشانی</Button>
+        <Button type="button" size="sm" loading={m.isPending} disabled={!f.title.trim() || !f.address.trim() || !loc} onClick={() => m.mutate()}>ذخیره نشانی</Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => onDone()}>انصراف</Button>
       </div>
       {m.error && !Object.keys(err).length && <p className="text-sm text-danger">{(m.error as Error).message}</p>}

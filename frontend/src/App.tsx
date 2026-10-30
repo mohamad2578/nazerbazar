@@ -33,6 +33,7 @@ const Discounts = lazy(() => import("./pages/public/Discounts"));
 const Dashboard = lazy(() => import("./pages/panel/Dashboard"));
 const Stores = lazy(() => import("./pages/panel/Stores"));
 const Products = lazy(() => import("./pages/panel/Products"));
+const FeaturedShop = lazy(() => import("./pages/public/FeaturedShop"));
 const Couriers = lazy(() => import("./pages/panel/Couriers"));
 const CourierApp = lazy(() => import("./pages/courier/CourierApp"));
 const Prices = lazy(() => import("./pages/panel/Prices"));
@@ -82,6 +83,7 @@ export default function App() {
           <Route index element={<Home />} />
           <Route path="p/:id" element={<ProductDetail />} />
           <Route path="s/:id" element={<StoreDetail />} />
+          <Route path="s/:id/shop" element={<FeaturedShop />} />
           <Route path="map" element={<MapPage />} />
           <Route path="track" element={<Track />} />
           <Route path="subsidized" element={<Subsidized />} />

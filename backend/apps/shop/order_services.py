@@ -94,6 +94,8 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
             phone = normalize_mobile(saved.receiver_phone) if saved.receiver_phone else phone
         if not address:
             raise ValidationError({"address": "برای ارسال به نشانی، نشانی را وارد یا انتخاب کنید."})
+        if store.is_featured and (lat is None or lng is None or lat == "" or lng == ""):
+            raise ValidationError({"address": "موقعیت نشانی روی نقشه را مشخص کنید تا پیک بتواند پیدا کند."})
     else:
         address, lat, lng = "", None, None
 

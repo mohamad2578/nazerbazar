@@ -6,7 +6,7 @@ import { api, fieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { num, toman } from "../lib/format";
 import type { OrderT } from "../lib/orders";
-import AddressBook from "./AddressBook";
+import AddressBook, { type Address } from "./AddressBook";
 import { Badge, Button, cx, Field, Input, Sheet, Textarea, useToast } from "./ui";
 
 /** یک سطر سبد: کالای تکی یا یک بسته پیشنهادی. key یکتاست («p12» / «b3»). */
@@ -39,7 +39,8 @@ export default function ShopCart({
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState<OrderT | null>(null);
-  const [addressId, setAddressId] = useState<number | null>(null);
+  const [address, setAddress] = useState<Address | null>(null);
+  const addressId = address?.id ?? null;
   const [f, setF] = useState({
     customer_name: user ? `${user.first_name} ${user.last_name}`.trim() : "",
     customer_phone: user?.mobile ?? "",
@@ -74,7 +75,7 @@ export default function ShopCart({
     onError: (e: Error) => toast(e.message, "danger"),
   });
   const err = fieldErrors(m.error);
-  const needAddress = f.delivery === "delivery" && !addressId;
+  const needAddress = f.delivery === "delivery" && (!addressId || (!!featured && !address?.lat));
   const walletShort = f.payment_method === "wallet" && wallet.data && balance < total * 1;
 
   if (!count && !done) return null;
@@ -183,7 +184,12 @@ export default function ShopCart({
             {f.delivery === "delivery" && (
               <div className="sm:col-span-2">
                 <div className="mb-1.5 text-sm font-medium">نشانی تحویل</div>
-                <AddressBook selected={addressId} onSelect={(a) => setAddressId(a?.id ?? null)} />
+                <AddressBook selected={addressId} onSelect={setAddress} />
+                {featured && address && !address.lat && (
+                  <p className="mt-2 rounded-xl bg-danger-soft p-2.5 text-xs leading-6 text-danger">
+                    این نشانی موقعیت نقشه ندارد؛ پیک نمی‌تواند پیدایش کند. نشانی جدید با موقعیت روی نقشه بسازید.
+                  </p>
+                )}
                 {err.address && <p className="mt-1 text-xs text-danger">{err.address}</p>}
               </div>
             )}

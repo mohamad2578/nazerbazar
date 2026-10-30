@@ -1,17 +1,13 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, BadgePercent, ChevronLeft, ClipboardList, Flame, PackageCheck, Search, Store as StoreIcon, Truck, X } from "lucide-react";
+import { BadgePercent, ChevronLeft, ClipboardList, Flame, PackageCheck, Search, Store as StoreIcon, Truck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import Carousel from "../../components/Carousel";
 import HeroSlider from "../../components/HeroSlider";
 import ProductCard, { type PublicProduct } from "../../components/ProductCard";
 import { Button, cx, Empty, ErrorBox, Loading } from "../../components/ui";
 import { ReportFab } from "../../layouts/PublicLayout";
 import { api, type Page } from "../../lib/api";
-import { num, toman } from "../../lib/format";
 import { useCounty } from "../../lib/prefs";
-
-type Stats = { stores: number; products: number; unions: number; resolved_complaints: number; latest_changes: PublicProduct[] };
 
 export default function Home() {
   const [county] = useCounty();
@@ -37,7 +33,6 @@ export default function Home() {
     setParams(p, { replace: true });
   };
 
-  const stats = useQuery({ queryKey: ["stats", county?.id], queryFn: () => api.get<Stats>("/public/stats/", { county: county?.id }) });
   const cats = useQuery({ queryKey: ["categories"], queryFn: () => api.get<{ id: number; name: string }[]>("/categories/"), staleTime: 3600_000 });
   const list = useInfiniteQuery({
     queryKey: ["products", county?.id, params.get("q"), category, ordering],
@@ -81,30 +76,6 @@ export default function Home() {
           <QuickLink to="/discounts" icon={<BadgePercent className="size-5" />} title="تخفیفات فروشگاه‌ها" sub="پیشنهادهای ویژه" />
           <QuickLink to="/rates" icon={<ClipboardList className="size-5" />} title="نرخ‌نامه اتحادیه‌ها" sub="حداکثر قیمت هر کالا" />
           <QuickLink to="/suppliers" icon={<Truck className="size-5" />} title="ثبت‌نام تامین‌کنندگان" sub="فرم تامین کالا" />
-        </section>
-      )}
-
-      {!searching && !!stats.data?.latest_changes.length && (
-        <section>
-          <Carousel title="آخرین تغییرات حداکثر قیمت">
-            {stats.data.latest_changes.map((p) => {
-              const up = p.previous_price ? p.official_price > p.previous_price : null;
-              const change = p.previous_price ? ((p.official_price - p.previous_price) / p.previous_price) * 100 : null;
-              return (
-                <Link key={p.id} to={`/p/${p.id}`} className="rounded-2xl border border-line bg-surface p-3 shadow-card">
-                  <div className="truncate text-sm font-medium">{p.name}</div>
-                  <div className="mt-0.5 truncate text-[11px] text-muted">{p.union_name}</div>
-                  <div className="mt-2 tabular font-semibold">{toman(p.official_price)}</div>
-                  {change != null && change !== 0 && (
-                    <div className={cx("mt-1 inline-flex items-center gap-0.5 text-xs", up ? "text-danger" : "text-ok")}>
-                      {up ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />}
-                      {num(Math.abs(change), 1)}٪
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-          </Carousel>
         </section>
       )}
 

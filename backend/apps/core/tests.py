@@ -1413,7 +1413,7 @@ class FeaturedShopTests(Base):
 
     def order(self, user=None, items=None, bundles=None, **extra):
         body = {"items": items if items is not None else [{"product": self.rice.pk, "quantity": 1}],
-                "bundles": bundles or [], "delivery": "delivery", "address": "همدان، بلوار",
+                "bundles": bundles or [], "delivery": "delivery", "address": "همدان، بلوار", "lat": "34.8", "lng": "48.5",
                 "payment_method": "online", **extra}
         return self.client_for(user or self.buyer).post(f"/api/public/stores/{self.fstore.pk}/order/", body, format="json")
 
@@ -1588,6 +1588,12 @@ class FeaturedShopTests(Base):
     def test_featured_store_accepts_only_online_payment_and_courier_delivery(self):
         for extra in ({"payment_method": "cash"}, {"payment_method": "wallet"}, {"delivery": "pickup"}):
             self.assertEqual(self.order(**extra).status_code, 400, extra)
+        self.assertEqual(self.order().status_code, 201)
+
+    def test_featured_courier_delivery_requires_map_location(self):
+        r = self.order(lat=None, lng=None)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("address", r.data)
         self.assertEqual(self.order().status_code, 201)
 
 

@@ -44,6 +44,8 @@ class OrderSerializer(serializers.ModelSerializer):
     list_total = serializers.SerializerMethodField()
     savings = serializers.SerializerMethodField()
     payment_url = serializers.SerializerMethodField()
+    courier_name = serializers.SerializerMethodField()
+    courier_mobile = serializers.CharField(source="courier.user.mobile", read_only=True, default="")
 
     class Meta:
         model = Order
@@ -52,6 +54,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "delivery", "delivery_display", "address", "lat", "lng", "note", "total", "discount", "list_total",
             "savings", "payment_method", "payment_method_display", "payment_status", "payment_status_display",
             "status", "status_display", "store_note", "created_at", "items", "events", "payment_url",
+            "courier", "courier_name", "courier_mobile", "assigned_at", "picked_at", "delivered_at",
         ]
 
     def get_events(self, o):
@@ -71,17 +74,20 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_payment_url(self, o):
         return getattr(o, "payment_url", "")
 
+    def get_courier_name(self, o):
+        return (o.courier.user.full_name or o.courier.user.mobile) if o.courier_id else ""
+
 
 class OrderViewSet(ScopedModelViewSet):
     """کارتابل سفارش‌های فروشگاه (و مشاهده برای سطوح نظارتی)."""
     union_section = "orders"
 
-    queryset = Order.objects.select_related("store").prefetch_related("items", "events")
+    queryset = Order.objects.select_related("store", "courier__user").prefetch_related("items", "events")
     serializer_class = OrderSerializer
     read_roles = ("governorate", "samt", "chamber", "union", "store")
     write_roles = ("store",)
     http_method_names = ["get", "post", "head", "options"]
-    filterset_fields = ["status", "store", "delivery", "payment_status", "payment_method"]
+    filterset_fields = ["status", "store", "delivery", "payment_status", "payment_method", "courier"]
     search_fields = ["code", "customer_name", "customer_phone"]
 
     def get_queryset(self):
@@ -133,7 +139,7 @@ def place_order(request, pk):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_orders(request):
-    qs = Order.objects.filter(customer=request.user).select_related("store").prefetch_related("items", "events")
+    qs = Order.objects.filter(customer=request.user).select_related("store", "courier__user").prefetch_related("items", "events")
     return Response(OrderSerializer(qs[:50], many=True).data)
 
 

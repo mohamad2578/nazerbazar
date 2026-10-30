@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, History, MessageSquareText, SlidersHorizontal, BadgePercent, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
-  Newspaper, Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
+  Bike, Newspaper, Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -37,6 +37,7 @@ export const NAV: Item[] = [
   { to: "/panel/price-upload", label: "بارگذاری نرخ‌ها", icon: FileSpreadsheet, roles: LOAD },
   { to: "/panel/price-log", label: "سابقه حداکثر قیمت‌ها", icon: History, roles: ["samt"] },
   { to: "/panel/orders", label: "سفارش‌ها", icon: ShoppingCart, roles: [...M, "store"], mobile: true, section: "orders" },
+  { to: "/panel/couriers", label: "مدیریت پیک", short: "پیک‌ها", icon: Bike, roles: ["store"], mobile: true },
   { to: "/panel/my-shop", label: "فروشگاه اینترنتی من", icon: ShoppingBag, roles: ["store"], mobile: true },
   { to: "/panel/specials", label: "تخفیفات ویژه", short: "تخفیفات", icon: BadgePercent, roles: ["store"], mobile: true },
   { to: "/panel/complaints", label: "شکایات", icon: MessageSquareWarning, roles: [...M, "store"], mobile: true, section: "complaints" },

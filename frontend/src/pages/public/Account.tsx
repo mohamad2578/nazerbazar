@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, LayoutDashboard, LogOut, MapPin, Search, ShieldAlert, ShoppingCart, Store, Wallet, XCircle } from "lucide-react";
+import { Bike, CheckCircle2, LayoutDashboard, LogOut, MapPin, Search, ShieldAlert, ShoppingCart, Store, Wallet, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import AddressBook from "../../components/AddressBook";
@@ -36,6 +36,7 @@ export default function Account() {
         <AddressBook />
       </Card>
       <Card className="divide-y divide-line">
+        {user.is_courier && <Row to="/courier" icon={<Bike className="size-5" />} label="اپلیکیشن پیک (سفارش‌های تحویلی من)" />}
         {isPanelUser(user) && <Row to="/panel" icon={<LayoutDashboard className="size-5" />} label="ورود به پنل" />}
         <Row to="/orders" icon={<ShoppingCart className="size-5" />} label="سفارش‌های من و فاکتورها" />
         <Row to="/track" icon={<Search className="size-5" />} label="گزارش‌های من و پیگیری" />

@@ -21,7 +21,7 @@ from apps.market import price_api
 from apps.observatory import api as observatory
 from apps.orgs import api as orgs
 from apps.shop import api as shop
-from apps.shop import order_api as orders
+from apps.shop import courier_api, order_api as orders
 
 router = DefaultRouter()
 router.register("slides", cms.SlideViewSet, basename="slide")
@@ -46,6 +46,7 @@ router.register("quotas", distribution.QuotaViewSet, basename="quota")
 router.register("shop-categories", shop.ShopCategoryViewSet, basename="shop-category")
 router.register("shop-products", shop.MyShopProductViewSet, basename="shop-product")
 router.register("shop-bundles", shop.ShopBundleViewSet, basename="shop-bundle")
+router.register("couriers", courier_api.CourierViewSet, basename="courier")
 router.register("other-prices", shop.ShopPriceReviewViewSet, basename="other-price")
 router.register("orders", orders.OrderViewSet, basename="order")
 router.register("public/geo", orgs.PublicGeoViewSet, basename="public-geo")
@@ -82,6 +83,12 @@ api = [
     path("public/payments/callback/", orders.payment_callback),
     path("public/featured-store/", shop.public_featured_store),
     path("public/stores/<int:pk>/bundles/", shop.public_bundles),
+    path("courier/me/", courier_api.courier_me),
+    path("courier/orders/", courier_api.courier_orders),
+    path("courier/orders/<int:pk>/pickup/", courier_api.courier_pickup),
+    path("courier/orders/<int:pk>/deliver/", courier_api.courier_deliver),
+    path("courier/orders/<int:pk>/fail/", courier_api.courier_fail),
+    path("orders/assign/", courier_api.assign_orders),
     path("wallet/", orders.my_wallet),
     path("wallet/topup/", orders.wallet_topup),
     path("wallet/admin-credit/", orders.wallet_admin_credit),

@@ -1573,3 +1573,128 @@ class FeaturedShopTests(Base):
         self.rice.save()
         self.assertEqual(self.order().status_code, 400)           # کالای تاییدنشده قابل سفارش نیست
         self.assertEqual(APIClient().get(f"/api/public/stores/{self.fstore.pk}/bundles/").data, [])
+
+
+class CourierTests(Base):
+    """مدیریت پیک: تعریف پیک، ارسال لیست سفارش‌ها و گردش تحویل در اپلیکیشن پیک."""
+
+    def setUp(self):
+        from apps.shop.models import ShopProduct
+
+        self.store = self.stores[0]
+        self.owner = self.store.owner
+        self.p = ShopProduct.objects.create(store=self.store, name="عسل", price=500_000, status="approved")
+        self.mgr = self.client_for(self.owner)
+
+    def make_courier(self, mobile="09128880001"):
+        r = self.mgr.post("/api/couriers/", {"mobile": mobile, "first_name": "رضا", "last_name": "پیک"}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        return r.data["id"], User.objects.get(mobile=mobile)
+
+    def order(self, delivery="delivery", method="cash", store=None):
+        store = store or self.store
+        r = self.client_for(self.citizen).post(
+            f"/api/public/stores/{store.pk}/order/",
+            {"items": [{"product": self.p.pk, "quantity": 2}], "delivery": delivery, "address": "همدان، بلوار",
+             "lat": "34.8", "lng": "48.5", "payment_method": method, "customer_name": "علی"}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        return r.data["id"]
+
+    def move(self, oid, *statuses):
+        for st in statuses:
+            self.assertEqual(self.mgr.post(f"/api/orders/{oid}/transition/", {"status": st}).status_code, 200)
+
+    def test_manager_adds_courier_and_rules(self):
+        cid, user = self.make_courier()
+        self.assertTrue(self.client_for(user).get("/api/auth/me/").data["is_courier"])
+        self.assertEqual(self.mgr.post("/api/couriers/", {"mobile": "09128880001"}, format="json").status_code, 400)  # تکراری
+        self.assertEqual(self.mgr.post("/api/couriers/", {"mobile": self.uni.mobile}, format="json").status_code, 400)  # کاربر سازمانی
+        self.assertEqual(self.client_for(self.stores[1].owner).get("/api/couriers/").data, [])
+        self.assertEqual(self.client_for(self.citizen).get("/api/couriers/").status_code, 403)
+        self.assertEqual(len(self.mgr.get("/api/couriers/").data), 1)
+
+    def test_assign_list_and_full_delivery_flow(self):
+        cid, cuser = self.make_courier()
+        o1, o2 = self.order(), self.order()
+        pickup_order = self.order(delivery="pickup")
+        self.move(o1, "confirmed")
+        # سفارش «ثبت‌شده» و سفارش حضوری پیک نمی‌گیرند
+        self.assertEqual(self.mgr.post("/api/orders/assign/", {"courier": cid, "orders": [o1, o2]}, format="json").status_code, 400)
+        self.move(o2, "confirmed")
+        self.move(pickup_order, "confirmed")
+        self.assertEqual(self.mgr.post("/api/orders/assign/", {"courier": cid, "orders": [pickup_order]}, format="json").status_code, 400)
+        r = self.mgr.post("/api/orders/assign/", {"courier": cid, "orders": [o1, o2]}, format="json")
+        self.assertEqual((r.status_code, r.data["assigned"]), (200, 2))
+        self.assertTrue(cuser.notifications.filter(title__contains="سفارش جدید").exists())
+        self.assertEqual(self.mgr.get("/api/couriers/").data[0]["to_deliver"], 2)
+
+        c = self.client_for(cuser)
+        mine = c.get("/api/courier/orders/").data
+        self.assertEqual(len(mine), 2)
+        self.assertEqual((mine[0]["cash_due"], mine[0]["address"], mine[0]["lat"]), (1_000_000, "همدان، بلوار", "34.800000"))
+        # تا «آماده تحویل» نشده تحویل‌گرفتن ممکن نیست
+        self.assertEqual(c.post(f"/api/courier/orders/{o1}/pickup/").status_code, 400)
+        self.move(o1, "ready")
+        self.assertEqual(c.post(f"/api/courier/orders/{o1}/deliver/").status_code, 400)       # قبل از تحویل‌گرفتن
+        r = c.post(f"/api/courier/orders/{o1}/pickup/")
+        self.assertEqual((r.status_code, r.data["status"]), (200, "out_for_delivery"))
+        self.assertTrue(self.citizen.notifications.filter(title__contains="در مسیر").exists())
+        r = c.post(f"/api/courier/orders/{o1}/deliver/")
+        self.assertEqual((r.data["status"], r.data["cash_due"]), ("delivered", 0))
+        mine_order = self.client_for(self.citizen).get("/api/public/orders/mine/").data
+        done = next(o for o in mine_order if o["id"] == o1)
+        self.assertEqual((done["payment_status"], done["courier_name"]), ("paid", "رضا پیک"))
+        self.assertEqual(len(c.get("/api/courier/orders/", {"scope": "done"}).data), 1)
+        self.assertEqual(len(c.get("/api/courier/orders/").data), 1)
+
+    def test_failed_delivery_returns_to_store(self):
+        cid, cuser = self.make_courier()
+        oid = self.order()
+        self.move(oid, "confirmed", "ready")
+        self.mgr.post("/api/orders/assign/", {"courier": cid, "orders": [oid]}, format="json")
+        c = self.client_for(cuser)
+        c.post(f"/api/courier/orders/{oid}/pickup/")
+        self.assertEqual(c.post(f"/api/courier/orders/{oid}/fail/", {}).status_code, 400)       # دلیل لازم است
+        r = c.post(f"/api/courier/orders/{oid}/fail/", {"reason": "مشتری پاسخ نداد"})
+        self.assertEqual((r.status_code, r.data["status"]), (200, "ready"))
+        self.assertEqual(c.get("/api/courier/orders/").data, [])
+        self.assertTrue(self.owner.notifications.filter(title__contains="ناموفق").exists())
+
+    def test_isolation_between_couriers_and_stores(self):
+        cid, cuser = self.make_courier()
+        oid = self.order()
+        self.move(oid, "confirmed", "ready")
+        self.mgr.post("/api/orders/assign/", {"courier": cid, "orders": [oid]}, format="json")
+        other_id, other = self.make_courier_for_other_store()
+        self.assertEqual(self.client_for(other).post(f"/api/courier/orders/{oid}/pickup/").status_code, 400)
+        self.assertEqual(self.client_for(self.citizen).get("/api/courier/orders/").status_code, 403)
+        # مدیر فروشگاه دیگر نمی‌تواند سفارش این فروشگاه را به پیک خودش بسپارد
+        r = self.client_for(self.stores[1].owner).post("/api/orders/assign/", {"courier": other_id, "orders": [oid]}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def make_courier_for_other_store(self):
+        r = self.client_for(self.stores[1].owner).post("/api/couriers/", {"mobile": "09128880002"}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        return r.data["id"], User.objects.get(mobile="09128880002")
+
+    def test_deactivate_rules_and_cancel_notifies_courier(self):
+        cid, cuser = self.make_courier()
+        o1, o2 = self.order(), self.order()
+        self.move(o1, "confirmed", "ready")
+        self.move(o2, "confirmed")
+        self.mgr.post("/api/orders/assign/", {"courier": cid, "orders": [o1, o2]}, format="json")
+        self.client_for(cuser).post(f"/api/courier/orders/{o1}/pickup/")
+        self.assertEqual(self.mgr.delete(f"/api/couriers/{cid}/").status_code, 400)         # سفارش در مسیر دارد
+        self.move(o2, "canceled")
+        self.assertTrue(cuser.notifications.filter(title__contains="لغو شد").exists())
+        self.client_for(cuser).post(f"/api/courier/orders/{o1}/deliver/")
+        self.assertEqual(self.mgr.delete(f"/api/couriers/{cid}/").status_code, 204)
+        self.assertEqual(self.client_for(cuser).get("/api/courier/orders/").status_code, 403)  # دیگر پیک فعال نیست
+        # سفارش بعدی بدون پیک می‌ماند و دوباره قابل ارسال به پیک دیگری است
+        o3 = self.order()
+        self.move(o3, "confirmed")
+        cid2, _ = self.make_courier("09128880003")
+        self.assertEqual(self.mgr.post("/api/orders/assign/", {"courier": cid, "orders": [o3]}, format="json").status_code, 400)
+        self.assertEqual(self.mgr.post("/api/orders/assign/", {"courier": cid2, "orders": [o3]}, format="json").status_code, 200)
+        self.assertEqual(self.mgr.post("/api/orders/assign/", {"courier": None, "orders": [o3]}, format="json").status_code, 200)
+        self.assertIsNone(self.client_for(self.citizen).get("/api/public/orders/mine/").data[0]["courier"])

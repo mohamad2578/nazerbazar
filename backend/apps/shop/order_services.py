@@ -217,7 +217,8 @@ STORE_TRANSITIONS = {
     Order.Status.NEW: {Order.Status.CONFIRMED, Order.Status.CANCELED},
     Order.Status.CONFIRMED: {Order.Status.PREPARING, Order.Status.READY, Order.Status.CANCELED},
     Order.Status.PREPARING: {Order.Status.READY, Order.Status.CANCELED},
-    Order.Status.READY: {Order.Status.DELIVERED, Order.Status.CANCELED},
+    Order.Status.READY: {Order.Status.OUT_FOR_DELIVERY, Order.Status.DELIVERED, Order.Status.CANCELED},
+    Order.Status.OUT_FOR_DELIVERY: {Order.Status.DELIVERED, Order.Status.READY, Order.Status.CANCELED},
 }
 
 
@@ -241,6 +242,8 @@ def change_order_status(order: Order, actor: User, status: str, note: str = "") 
         order.store_note = note
     if status in (Order.Status.DELIVERED, Order.Status.CANCELED):
         order.closed_at = timezone.now()
+    if status == Order.Status.DELIVERED:
+        order.delivered_at = timezone.now()
     if status == Order.Status.DELIVERED and order.payment_method == Order.Payment.CASH:
         order.payment_status = Order.PaymentStatus.PAID    # پول نقد هنگام تحویل دریافت شد
     order.save()
@@ -248,6 +251,8 @@ def change_order_status(order: Order, actor: User, status: str, note: str = "") 
         _restore_stock(order)
         _refund(order, "لغو سفارش")
     OrderEvent.objects.create(order=order, status=status, actor=actor, note=note)
+    if status == Order.Status.CANCELED and order.courier_id:
+        notify([order.courier.user], f"سفارش {order.code} لغو شد", "نیازی به تحویل نیست.", "/courier")
 
     target = order.customer if not is_customer else order.store.owner
     notify([target], f"سفارش {order.code}: {order.get_status_display()}", note, "/panel/orders" if is_customer else "/orders")

@@ -17,6 +17,7 @@ class Order(TimeStamped):
         CONFIRMED = "confirmed", "تایید فروشگاه"
         PREPARING = "preparing", "در حال آماده‌سازی"
         READY = "ready", "آماده تحویل"
+        OUT_FOR_DELIVERY = "out_for_delivery", "در مسیر تحویل"
         DELIVERED = "delivered", "تحویل شد"
         CANCELED = "canceled", "لغو شد"
 
@@ -34,7 +35,8 @@ class Order(TimeStamped):
         PAID = "paid", "پرداخت‌شده"
         REFUNDED = "refunded", "بازگشت به کیف پول"
 
-    OPEN_STATUSES = (Status.AWAITING_PAYMENT, Status.NEW, Status.CONFIRMED, Status.PREPARING, Status.READY)
+    OPEN_STATUSES = (Status.AWAITING_PAYMENT, Status.NEW, Status.CONFIRMED, Status.PREPARING, Status.READY,
+                     Status.OUT_FOR_DELIVERY)
 
     code = models.CharField("کد سفارش", max_length=12, unique=True)
     store = models.ForeignKey("orgs.Store", on_delete=models.PROTECT, related_name="orders", verbose_name="فروشگاه")
@@ -49,6 +51,11 @@ class Order(TimeStamped):
     total = models.PositiveBigIntegerField("مبلغ کل (ریال)", default=0)
     lat = models.DecimalField("عرض جغرافیایی تحویل", max_digits=9, decimal_places=6, null=True, blank=True)
     lng = models.DecimalField("طول جغرافیایی تحویل", max_digits=9, decimal_places=6, null=True, blank=True)
+    courier = models.ForeignKey("shop.Courier", null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="orders", verbose_name="پیک")
+    assigned_at = models.DateTimeField("زمان ارسال به پیک", null=True, blank=True)
+    picked_at = models.DateTimeField("زمان تحویل به پیک", null=True, blank=True)
+    delivered_at = models.DateTimeField("زمان تحویل به مشتری", null=True, blank=True)
     discount = models.PositiveBigIntegerField("تخفیف بسته‌ها (ریال)", default=0)
     payment_method = models.CharField("روش پرداخت", max_length=10, choices=Payment.choices, default=Payment.CASH)
     payment_status = models.CharField("وضعیت پرداخت", max_length=10, choices=PaymentStatus.choices,

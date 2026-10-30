@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, MapPin, Package, Phone, Printer, ShoppingCart, User } from "lucide-react";
+import { Bike, CreditCard, MapPin, Package, Phone, Printer, ShoppingCart, User } from "lucide-react";
 import { useState } from "react";
-import { Badge, Button, Card, Empty, Field, Loading, PageHeader, Segmented, Sheet, Stat, Textarea, useToast } from "../../components/ui";
+import { Badge, Button, Card, Empty, Field, Loading, PageHeader, Segmented, Select, Sheet, Stat, Textarea, useToast } from "../../components/ui";
 import { api, type Page } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, dateTime, num, telLink, toman, webMapLink } from "../../lib/format";
@@ -13,6 +13,7 @@ const NEXT: Record<string, { status: string; label: string }[]> = {
   confirmed: [{ status: "preparing", label: "شروع آماده‌سازی" }, { status: "ready", label: "آماده تحویل" }, { status: "canceled", label: "لغو" }],
   preparing: [{ status: "ready", label: "آماده تحویل" }, { status: "canceled", label: "لغو" }],
   ready: [{ status: "delivered", label: "تحویل شد" }, { status: "canceled", label: "لغو" }],
+  out_for_delivery: [{ status: "delivered", label: "تحویل شد" }, { status: "ready", label: "برگشت به فروشگاه" }, { status: "canceled", label: "لغو" }],
 };
 
 export default function Orders() {
@@ -44,7 +45,7 @@ export default function Orders() {
       )}
       <Segmented value={status} onChange={setStatus} options={[
         { value: "", label: "همه" }, { value: "new", label: "جدید" }, { value: "confirmed", label: "تاییدشده" },
-        { value: "preparing", label: "آماده‌سازی" }, { value: "ready", label: "آماده تحویل" },
+        { value: "preparing", label: "آماده‌سازی" }, { value: "ready", label: "آماده تحویل" }, { value: "out_for_delivery", label: "در مسیر" },
         { value: "delivered", label: "تحویل‌شده" }, { value: "canceled", label: "لغوشده" },
       ]} />
 
@@ -65,6 +66,7 @@ export default function Orders() {
                   </div>
                   <div className="mt-1 truncate text-sm text-muted">
                     {o.customer_name} · {num(o.items.length)} قلم · {o.delivery_display}
+                    {o.courier_name && <> · <Bike className="inline size-3.5" /> {o.courier_name}</>}
                   </div>
                   <div className="mt-0.5 text-xs text-muted">{ago(o.created_at)}</div>
                 </div>
@@ -152,6 +154,8 @@ function OrderSheet({ order, canAct, onClose }: { order: OrderT; canAct: boolean
         چاپ فاکتور
       </Button>
 
+      {order.delivery === "delivery" && (canAct || order.courier) && <CourierBox order={order} canAct={canAct} onDone={onClose} />}
+
       {canAct && actions.length > 0 && (
         <div className="mt-5 space-y-3 border-t border-line pt-4">
           <Field label="یادداشت برای مشتری (اختیاری)">
@@ -183,5 +187,40 @@ function OrderSheet({ order, canAct, onClose }: { order: OrderT; canAct: boolean
         ))}
       </ol>
     </Sheet>
+  );
+}
+
+/** تعیین پیک برای سفارش ارسالی (سفارش‌ها را گروهی هم می‌شود از صفحه «مدیریت پیک» فرستاد). */
+function CourierBox({ order, canAct, onDone }: { order: OrderT; canAct: boolean; onDone: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [courier, setCourier] = useState(order.courier ? String(order.courier) : "");
+  const list = useQuery({ queryKey: ["couriers"], queryFn: () => api.get<{ id: number; name: string; mobile: string; is_active: boolean }[]>("/couriers/"), enabled: canAct });
+  const editable = ["confirmed", "preparing", "ready"].includes(order.status);
+  const m = useMutation({
+    mutationFn: () => api.post("/orders/assign/", { courier: courier ? Number(courier) : null, orders: [order.id] }),
+    onSuccess: () => {
+      toast(courier ? "سفارش برای پیک ارسال شد" : "پیک برداشته شد");
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["couriers"] });
+      onDone();
+    },
+    onError: (e: Error) => toast(e.message, "danger"),
+  });
+  return (
+    <div className="mt-4 rounded-xl border border-line p-3 text-sm">
+      <div className="flex items-center gap-1.5 font-medium"><Bike className="size-4 text-brand" /> پیک</div>
+      {order.courier_name && <p className="mt-1 text-muted">{order.courier_name} <span dir="ltr">({order.courier_mobile})</span>{order.assigned_at && ` — ارسال ${ago(order.assigned_at)}`}</p>}
+      {canAct && editable && (
+        <div className="mt-2 flex gap-2">
+          <Select value={courier} onChange={(e) => setCourier(e.target.value)}>
+            <option value="">— بدون پیک —</option>
+            {(list.data ?? []).filter((c) => c.is_active).map((c) => <option key={c.id} value={c.id}>{c.name || c.mobile}</option>)}
+          </Select>
+          <Button loading={m.isPending} disabled={String(order.courier ?? "") === courier} onClick={() => m.mutate()}>ارسال</Button>
+        </div>
+      )}
+      {canAct && !editable && !order.courier_name && <p className="mt-1 text-xs text-muted">در این وضعیت امکان تعیین پیک نیست.</p>}
+    </div>
   );
 }

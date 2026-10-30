@@ -23,13 +23,14 @@ CREATABLE_ROLES = {
 class MeSerializer(serializers.ModelSerializer):
     role_display = serializers.CharField(source="get_role_display", read_only=True)
     store = serializers.SerializerMethodField()
+    is_courier = serializers.SerializerMethodField()
     scope_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "mobile", "first_name", "last_name", "national_code", "role", "role_display",
-            "province", "chamber", "union", "store", "scope_name",
+            "province", "chamber", "union", "store", "is_courier", "scope_name",
         ]
         read_only_fields = ["mobile", "role", "province", "chamber", "union"]
 
@@ -39,6 +40,9 @@ class MeSerializer(serializers.ModelSerializer):
             return None
         return {"id": s.pk, "name": s.name, "status": s.status, "status_display": s.get_status_display(),
                 "status_reason": s.status_reason, "union_name": s.union_display, "is_featured": s.is_featured}
+
+    def get_is_courier(self, u):
+        return u.courier_profile.is_active if hasattr(u, "courier_profile") else False
 
     def get_scope_name(self, u):
         target = {"governorate": u.province, "samt": u.province, "chamber": u.chamber, "union": u.union}.get(u.role)

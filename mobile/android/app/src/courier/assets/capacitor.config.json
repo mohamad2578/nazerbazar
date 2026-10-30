@@ -1,0 +1,36 @@
+{
+  "appId": "ir.nazer724.courier",
+  "appName": "ناظر پیک",
+  "webDir": "www",
+  "server": {
+    "url": "https://nazer724.ir/courier",
+    "androidScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": [
+      "nazer724.ir",
+      "www.nazer724.ir"
+    ]
+  },
+  "android": {
+    "appendUserAgent": "Nazer724Courier/1.0",
+    "allowMixedContent": false,
+    "backgroundColor": "#c2410c"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2200,
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 400,
+      "backgroundColor": "#c2410c",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#c2410c",
+      "overlaysWebView": false
+    }
+  }
+}

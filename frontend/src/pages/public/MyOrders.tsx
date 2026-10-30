@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, CreditCard, MapPin, Phone, Printer, ShoppingCart, Store, XCircle } from "lucide-react";
+import { Bike, CheckCircle2, CreditCard, MapPin, Phone, Printer, ShoppingCart, Store, XCircle } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Badge, Button, Card, Empty, Loading, useToast } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -98,6 +98,13 @@ export default function MyOrders() {
             )}
 
             {o.store_note && <p className="mt-2 rounded-xl bg-brand-soft p-2.5 text-xs text-brand">پیام فروشگاه: {o.store_note}</p>}
+            {o.courier_name && ["ready", "out_for_delivery"].includes(o.status) && (
+              <p className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-surface-2 p-2.5 text-xs">
+                <Bike className="size-4 text-brand" /> پیک شما: <b>{o.courier_name}</b>
+                {o.status === "out_for_delivery" && <Badge tone="brand">در مسیر</Badge>}
+                {o.courier_mobile && <a href={telLink(o.courier_mobile)} className="mr-auto text-brand">تماس با پیک</a>}
+              </p>
+            )}
 
             <div className="mt-3 flex flex-wrap gap-2">
               {o.status === "awaiting_payment" && (

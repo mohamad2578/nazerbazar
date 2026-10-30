@@ -114,5 +114,5 @@ class ShopProduct(TimeStamped):
         return round((self.old_price - self.price) / self.old_price * 100)
 
 
-from .commerce import Payment, ShopBundle, ShopBundleItem, UserAddress, Wallet, WalletTx  # noqa: E402,F401
+from .commerce import Courier, Payment, ShopBundle, ShopBundleItem, UserAddress, Wallet, WalletTx  # noqa: E402,F401
 from .orders import Order, OrderEvent, OrderItem  # noqa: E402,F401  (ثبت مدل‌ها در اپ)

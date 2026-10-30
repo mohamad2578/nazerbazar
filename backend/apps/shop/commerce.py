@@ -92,6 +92,24 @@ class Payment(models.Model):
         ordering = ["-created_at"]
 
 
+class Courier(TimeStamped):
+    """پیک یک فروشگاه؛ با همان شماره موبایل (کد پیامکی) وارد اپلیکیشن پیک می‌شود."""
+
+    store = models.ForeignKey("orgs.Store", on_delete=models.CASCADE, related_name="couriers", verbose_name="فروشگاه")
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="courier_profile")
+    is_active = models.BooleanField("فعال", default=True)
+
+    SCOPE = {"store": "store"}
+
+    class Meta:
+        verbose_name = "پیک"
+        verbose_name_plural = "پیک‌ها"
+        ordering = ["-is_active", "user__first_name", "id"]
+
+    def __str__(self):
+        return self.user.full_name or self.user.mobile
+
+
 class UserAddress(TimeStamped):
     """نشانی‌های ذخیره‌شده مشتری برای ارسال با پیک."""
 

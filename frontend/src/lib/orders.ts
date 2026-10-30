@@ -10,12 +10,13 @@ export type OrderT = {
   lat: string | null; lng: string | null; note: string; total: number; discount: number; list_total: number; savings: number;
   payment_method: string; payment_method_display: string; payment_status: string; payment_status_display: string;
   status: string; status_display: string; store_note: string; created_at: string; payment_url?: string;
+  courier: number | null; courier_name: string; courier_mobile: string; assigned_at: string | null; delivered_at: string | null;
   items: OrderItemT[];
   events: { status_display: string; note: string; created_at: string }[];
 };
 
 export const ORDER_TONE: Record<string, "neutral" | "brand" | "ok" | "warn" | "danger"> = {
-  awaiting_payment: "warn", new: "warn", confirmed: "brand", preparing: "brand", ready: "ok", delivered: "neutral", canceled: "danger",
+  awaiting_payment: "warn", new: "warn", confirmed: "brand", preparing: "brand", ready: "ok", out_for_delivery: "brand", delivered: "neutral", canceled: "danger",
 };
 
 export const PAY_TONE: Record<string, "neutral" | "ok" | "warn"> = { paid: "ok", unpaid: "warn", refunded: "neutral" };

@@ -33,6 +33,8 @@ const Discounts = lazy(() => import("./pages/public/Discounts"));
 const Dashboard = lazy(() => import("./pages/panel/Dashboard"));
 const Stores = lazy(() => import("./pages/panel/Stores"));
 const Products = lazy(() => import("./pages/panel/Products"));
+const Couriers = lazy(() => import("./pages/panel/Couriers"));
+const CourierApp = lazy(() => import("./pages/courier/CourierApp"));
 const Prices = lazy(() => import("./pages/panel/Prices"));
 const PriceApprovals = lazy(() => import("./pages/panel/PriceApprovals"));
 const PriceUpload = lazy(() => import("./pages/panel/PriceUpload"));
@@ -95,6 +97,7 @@ export default function App() {
           <Route path="news" element={<News />} />
           <Route path="news/:id" element={<NewsDetail />} />
         </Route>
+        <Route path="courier" element={<RequireAuth><CourierApp /></RequireAuth>} />
         <Route path="panel" element={<RequireAuth><RequirePanel><PanelLayout /></RequirePanel></RequireAuth>}>
           <Route index element={<Dashboard />} />
           <Route path="notifications" element={<Notifications />} />
@@ -106,6 +109,7 @@ export default function App() {
           <Route path="other-prices" element={<RequireAuth roles={OTHER_PRICES}><OtherPrices /></RequireAuth>} />
           <Route path="profile" element={<RequireAuth roles={["store"]}><StoreProfile /></RequireAuth>} />
           <Route path="my-shop" element={<RequireAuth roles={["store"]}><MyShop /></RequireAuth>} />
+          <Route path="couriers" element={<RequireAuth roles={["store"]}><Couriers /></RequireAuth>} />
           <Route path="specials" element={<RequireAuth roles={["store"]}><Specials /></RequireAuth>} />
           <Route path="orders" element={<RequireAuth roles={["store", "union", "chamber", "governorate"]}><Orders /></RequireAuth>} />
           <Route path="complaints" element={<Complaints />} />

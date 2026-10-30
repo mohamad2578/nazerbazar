@@ -17,6 +17,18 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // دو اپلیکیشن از یک پروژه: «ناظر ۷۲۴» (مشتری) و «ناظر پیک». هر کدام applicationId، نام، آیکن و نشانی
+    // شروع جدا دارد (src/courier/ بخش‌های پیک را بازنویسی می‌کند) و می‌توانند کنار هم روی یک گوشی نصب شوند.
+    flavorDimensions "app"
+    productFlavors {
+        customer {
+            dimension "app"
+        }
+        courier {
+            dimension "app"
+            applicationId "ir.nazer724.courier"
+        }
+    }
     // امضای نسخه انتشار: فایل keystore و رمزها فقط از متغیرهای محیطی (Secrets گیت‌هاب) خوانده می‌شوند
     // و هرگز در مخزن قرار نمی‌گیرند.
     def ksFile = System.getenv("NAZER_KEYSTORE_FILE")

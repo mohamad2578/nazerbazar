@@ -27,8 +27,10 @@ def add_courier(store: Store, mobile: str, first_name: str = "", last_name: str 
             raise ValidationError({"mobile": "این شماره قبلا به عنوان پیک ثبت شده است."})
     else:
         user = User.objects.create_user(mobile)
-    if first_name or last_name:
-        user.first_name, user.last_name = first_name or user.first_name, last_name or user.last_name
+    # نام کاربری که قبلا خودش وارد کرده بازنویسی نمی‌شود؛ فقط جای خالی پر می‌شود
+    first_name, last_name = str(first_name or "").strip()[:80], str(last_name or "").strip()[:80]
+    if (first_name and not user.first_name) or (last_name and not user.last_name):
+        user.first_name, user.last_name = user.first_name or first_name, user.last_name or last_name
         user.save(update_fields=["first_name", "last_name"])
     courier = Courier.objects.create(store=store, user=user)
     notify([user], "شما پیک فروشگاه شدید", f"فروشگاه «{store.name}» شما را به عنوان پیک ثبت کرد.", "/courier")
@@ -109,6 +111,7 @@ def pickup(order_id: int, courier: Courier) -> Order:
 @transaction.atomic
 def deliver(order_id: int, courier: Courier, note: str = "") -> Order:
     """تحویل به مشتری؛ برای پرداخت نقدی، دریافت وجه هم ثبت می‌شود."""
+    note = str(note or "").strip()[:250]
     order = _mine(order_id, courier)
     if order.status != Order.Status.OUT_FOR_DELIVERY:
         raise ValidationError({"detail": "ابتدا باید سفارش را از فروشگاه تحویل بگیرید."})
@@ -127,10 +130,11 @@ def deliver(order_id: int, courier: Courier, note: str = "") -> Order:
 @transaction.atomic
 def fail(order_id: int, courier: Courier, reason: str) -> Order:
     """تحویل ناموفق (مشتری در دسترس نبود و …): سفارش به فروشگاه برمی‌گردد."""
+    reason = str(reason or "").strip()[:250]
     order = _mine(order_id, courier)
     if order.status != Order.Status.OUT_FOR_DELIVERY:
         raise ValidationError({"detail": "فقط سفارشِ در مسیر را می‌توان ناموفق ثبت کرد."})
-    if not reason.strip():
+    if not reason:
         raise ValidationError({"reason": "دلیل را بنویسید."})
     order.status, order.courier, order.assigned_at, order.picked_at = Order.Status.READY, None, None, None
     order.save(update_fields=["status", "courier", "assigned_at", "picked_at", "updated_at"])

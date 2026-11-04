@@ -34,6 +34,8 @@ def parse_range(params, default_days: int = 30) -> tuple[date, date]:
     start = _d(params.get("from"), end - timedelta(days=default_days - 1))
     if start > end:
         start, end = end, start
+    if (end - start).days > 400:               # جلوگیری از گزارش چندساله که سرور را سنگین می‌کند
+        start = end - timedelta(days=400)
     return start, end
 
 

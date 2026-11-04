@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Flame, Gift, Minus, Package, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ShopCart, { type CartLine } from "../../components/ShopCart";
 import { Badge, Card, cx, Loading } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -23,7 +23,23 @@ const listPrice = (p: Product) => Math.max(p.old_price ?? 0, p.price);
 export default function FeaturedStorefront({ storeId, storeName }: { storeId: number; storeName: string }) {
   const products = useQuery({ queryKey: ["featured-products", storeId], queryFn: () => api.get<Product[]>(`/public/stores/${storeId}/shop/`) });
   const bundles = useQuery({ queryKey: ["featured-bundles", storeId], queryFn: () => api.get<Bundle[]>(`/public/stores/${storeId}/bundles/`) });
-  const [cart, setCart] = useState<Record<string, number>>({});
+  // سبد خرید با رفتن به صفحه دیگر یا برگشتن از درگاه از بین نرود (فقط در همین نشست مرورگر)
+  const cartKey = `nb.cart.${storeId}`;
+  const [cart, setCart] = useState<Record<string, number>>(() => {
+    try {
+      const v = JSON.parse(sessionStorage.getItem(cartKey) || "{}");
+      return v && typeof v === "object" ? v : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(cartKey, JSON.stringify(cart));
+    } catch {
+      /* حالت خصوصی مرورگر */
+    }
+  }, [cart, cartKey]);
 
   const items = products.data ?? [];
   const packs = bundles.data ?? [];

@@ -274,6 +274,7 @@ def store_save_offers(request):
     store = _my_store(request)
     acting = store.owner_id != request.user.pk
     items = request.data if isinstance(request.data, list) else request.data.get("items", [])
+    items = [i for i in items if isinstance(i, dict)] if isinstance(items, list) else []
     saved, errors = [], {}
     for item in items:
         pid = item.get("product")

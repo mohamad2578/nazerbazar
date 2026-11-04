@@ -44,7 +44,10 @@ def system_settings(request):
             s.samt_reports = reports
         s.updated_by = request.user
         s.save()
-    return Response(_payload(s))
+    data = _payload(s)
+    if request.user.role != "admin":
+        data["updated_by"] = ""        # نام مدیری که آخرین تغییر را داده فقط برای خود مدیر کل است
+    return Response(data)
 
 
 @api_view(["GET"])

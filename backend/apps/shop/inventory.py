@@ -36,6 +36,8 @@ def record(product_id: int, delta: int, kind: str, *, ref: str = "", note: str =
         return None
     cur = p.stock or 0
     new = cur + delta
+    if new > 2_000_000_000:
+        raise ValidationError({"qty": "موجودی از حد مجاز سامانه بیشتر می‌شود."})
     if new < 0 and not allow_negative:
         raise ValidationError({"qty": f"موجودی «{p.name}» کافی نیست (موجودی فعلی {cur})."})
 
@@ -107,6 +109,8 @@ def create_purchase(store, supplier: Supplier, items: list[dict], *, date: date_
             raise ValidationError({"items": f"تعداد و قیمت خرید «{p.name}» باید بیشتر از صفر باشد."})
         lines.append((p, qty, cost))
     goods = sum(q * c for _, q, c in lines)
+    if goods > 10**13 or max(discount, tax, shipping) > 10**13:
+        raise ValidationError({"items": "مبلغ فاکتور از حد مجاز بیشتر است؛ تعداد و قیمت‌ها را بررسی کنید."})
     total = goods - discount + tax + shipping
     if total < 0:
         raise ValidationError({"discount": "تخفیف از جمع فاکتور بیشتر است."})

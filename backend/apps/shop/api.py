@@ -56,14 +56,22 @@ class ShopProductSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         # موجودی دقیق انبار فقط برای صاحب فروشگاه و مسئولان است؛ مشتری فقط «ناموجود» را می‌بیند
         user = getattr(self.context.get("request"), "user", None)
-        staff = bool(user and user.is_authenticated and (
-            user.role in (Role.ADMIN, Role.GOVERNORATE, Role.SAMT, Role.CHAMBER, Role.UNION)
-            or instance.store.owner_id == user.pk
-        ))
+        # (مسئولان سطح‌های بالاتر فقط مشخصات عمومی و وضعیت تایید را می‌بینند، نه موجودی و قیمت تمام‌شده)
+        staff = bool(user and user.is_authenticated and (user.role == Role.ADMIN or instance.store.owner_id == user.pk))
         if not staff:
             for k in ("stock", "cost_price", "min_stock", "shelf"):
                 data.pop(k, None)
         return data
+
+    def validate_price(self, v):
+        if v < 1000:
+            raise serializers.ValidationError("قیمت باید دست‌کم ۱٬۰۰۰ ریال (۱۰۰ تومان) باشد.")
+        return v
+
+    def validate_per_user_limit(self, v):
+        if v is not None and v < 1:
+            raise serializers.ValidationError("سقف خرید باید دست‌کم ۱ باشد (یا خالی بگذارید).")
+        return v
 
     def validate(self, attrs):
         special = attrs.get("is_special", getattr(self.instance, "is_special", False))
@@ -157,15 +165,19 @@ class MyShopProductViewSet(ScopedModelViewSet):
 @permission_classes([AllowAny])
 def public_shop(request, pk):
     """ویترین فروشگاه اینترنتی یک فروشگاه برای نمایش عمومی."""
+    from .order_services import expire_unpaid_orders
+
     store = get_object_or_404(Store, pk=pk, status=Store.Status.ACTIVE)
+    if store.is_featured:
+        expire_unpaid_orders(store, limit=50)       # موجودی نگه‌داشته‌شده‌ی سفارش‌های رهاشده آزاد شود
     qs = store.shop_products.filter(
         is_active=True, status=ShopProduct.Status.APPROVED
-    ).select_related("category")
-    if category := request.query_params.get("category"):
-        qs = qs.filter(category_id=category)
+    ).select_related("category", "store__union")
+    if (category := request.query_params.get("category", "")).isdigit():
+        qs = qs.filter(category_id=int(category))
     if q := request.query_params.get("q"):
-        qs = qs.filter(name__icontains=q)
-    return Response(ShopProductSerializer(qs, many=True, context={"request": request}).data)
+        qs = qs.filter(name__icontains=q[:80])
+    return Response(ShopProductSerializer(qs[:300], many=True, context={"request": request}).data)
 
 
 @api_view(["GET"])
@@ -177,13 +189,13 @@ def public_shop_products(request):
     qs = ShopProduct.objects.filter(
         is_active=True, is_available=True, status=ShopProduct.Status.APPROVED,
         store__status=Store.Status.ACTIVE,
-    ).select_related("store", "category")
-    if county := request.query_params.get("county"):
-        qs = stores_in_county(qs, county, prefix="store__")
-    if category := request.query_params.get("category"):
-        qs = qs.filter(category_id=category)
+    ).select_related("store__union", "category")
+    if (county := request.query_params.get("county", "")).isdigit():
+        qs = stores_in_county(qs, int(county), prefix="store__")
+    if (category := request.query_params.get("category", "")).isdigit():
+        qs = qs.filter(category_id=int(category))
     if q := request.query_params.get("q"):
-        qs = qs.filter(name__icontains=q)
+        qs = qs.filter(name__icontains=q[:80])
     ordering = {"price": "price", "-price": "-price", "recent": "-created_at"}.get(
         request.query_params.get("ordering"), "-created_at"
     )
@@ -229,7 +241,7 @@ class ShopPriceReviewViewSet(ScopedModelViewSet):
 
     def _review(self, request, approve: bool):
         product = self.get_object()
-        note = (request.data.get("note") or "").strip()
+        note = str(request.data.get("note") or "").strip()[:300]
         if not approve and not note:
             raise ValidationError({"note": "برای رد قیمت، دلیل را بنویسید."})
         if request.user.role not in SHOP_REVIEWER_ROLES:
@@ -298,10 +310,10 @@ def public_special_offers(request):
         .select_related("store")
         .annotate(off=ExpressionWrapper((F("old_price") - F("price")) * 1.0 / F("old_price"), output_field=FloatField()))
     )
-    if county := request.query_params.get("county"):
-        qs = stores_in_county(qs, county, prefix="store__")
+    if (county := request.query_params.get("county", "")).isdigit():
+        qs = stores_in_county(qs, int(county), prefix="store__")
     if q := request.query_params.get("q"):
-        qs = qs.filter(name__icontains=q)
+        qs = qs.filter(name__icontains=q[:80])
     ordering = {"price": "price", "recent": "-created_at"}.get(request.query_params.get("ordering"), "-off")
     paginator = Pagination()
     page = paginator.paginate_queryset(qs.order_by(ordering, "-created_at"), request)
@@ -364,6 +376,11 @@ class ShopBundleSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"items": "فهرست کالاهای بسته نامعتبر است."})
         return super().to_internal_value(data)
 
+    def validate_price(self, v):
+        if v < 1000:
+            raise serializers.ValidationError("قیمت بسته باید دست‌کم ۱٬۰۰۰ ریال (۱۰۰ تومان) باشد.")
+        return v
+
     def _check_items(self, items):
         store = self.context["store"]
         if not items:
@@ -419,8 +436,13 @@ class ShopBundleViewSet(ScopedModelViewSet):
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
-        if self.request.method in ("POST", "PUT", "PATCH") and self.request.user.role == Role.STORE:
-            ctx["store"] = self.get_object().store if self.kwargs.get("pk") else self._store()
+        if self.request.method in ("POST", "PUT", "PATCH"):
+            if self.kwargs.get("pk"):
+                ctx["store"] = self.get_object().store
+            elif self.request.user.role == Role.STORE:
+                ctx["store"] = self._store()
+            else:
+                raise ValidationError({"detail": "بسته پیشنهادی را فقط مالک فروشگاه می‌سازد."})
         return ctx
 
     def perform_create(self, serializer):

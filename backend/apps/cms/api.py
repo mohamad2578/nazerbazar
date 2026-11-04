@@ -22,7 +22,8 @@ class SlideViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
     def get_permissions(self):
-        return [AllowAny()] if self.request.method == "GET" else [role_permission("admin")()]
+        # فهرست مدیریتی (شامل اسلایدهای غیرفعال) فقط برای مدیر کل است؛ نمایش عمومی از /public/slides/ می‌آید
+        return [role_permission("admin")()]
 
 
 @api_view(["GET"])

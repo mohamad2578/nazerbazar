@@ -154,7 +154,7 @@ class ComplaintViewSet(ScopedModelViewSet):
                 raise ValidationError({"status": "رسیدگی با اتحادیه است؛ برای بستن مستقیم override را ارسال کنید."})
         violation = request.data.get("violation_confirmed")
         services.change_status(
-            c, request.user, request.data.get("status", c.status), (request.data.get("note") or "").strip(),
+            c, request.user, request.data.get("status", c.status), str(request.data.get("note") or "").strip(),
             violation=None if violation in (None, "") else bool(violation),
             suspend_store=bool(request.data.get("suspend_store")),
             is_public=request.data.get("is_public", True) not in (False, "false", 0),

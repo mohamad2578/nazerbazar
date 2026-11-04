@@ -107,6 +107,11 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
+    "DEFAULT_PARSER_CLASSES": [
+        "apps.core.parsers.StrictJSONParser",
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
+    ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -159,6 +164,8 @@ KAVENEGAR_OTP_TEMPLATE = env("KAVENEGAR_OTP_TEMPLATE", "verify")
 PAYMENT_BACKEND = env("PAYMENT_BACKEND", "console")  # console (شبیه‌ساز توسعه) | zarinpal
 ZARINPAL_MERCHANT_ID = env("ZARINPAL_MERCHANT_ID", "")
 ZARINPAL_SANDBOX = env_bool("ZARINPAL_SANDBOX", False)
+# شبیه‌ساز درگاه (بدون پرداخت واقعی) فقط در توسعه و آزمون مجاز است؛ روی سرور واقعی باید درگاه واقعی تنظیم شود
+PAYMENT_ALLOW_MOCK = env_bool("PAYMENT_ALLOW_MOCK", DEBUG or "test" in __import__("sys").argv)
 OTP_TTL_SECONDS = 120
 # در حالت توسعه کد تایید در پاسخ API برگردانده می‌شود
 OTP_ECHO = env_bool("OTP_ECHO", DEBUG)

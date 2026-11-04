@@ -58,6 +58,18 @@ class OrderSerializer(serializers.ModelSerializer):
             "courier", "courier_name", "courier_mobile", "assigned_at", "picked_at", "delivered_at",
         ]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # مسئولان نظارتی (اتحادیه، اتاق اصناف، صمت، استانداری) نشانی دقیق، مختصات و تلفن مشتری را نمی‌بینند
+        user = getattr(self.context.get("request"), "user", None)
+        if user and user.is_authenticated and user.role in ("governorate", "samt", "chamber", "union"):
+            for k in ("address", "lat", "lng"):
+                data[k] = "" if k == "address" else None
+            phone = data.get("customer_phone") or ""
+            data["customer_phone"] = phone[:4] + "***" + phone[-2:] if len(phone) > 6 else ""
+            data["courier_mobile"] = ""
+        return data
+
     def get_events(self, o):
         return [
             {"status_display": e.get_status_display(), "note": e.note, "created_at": e.created_at}
@@ -103,7 +115,7 @@ class OrderViewSet(ScopedModelViewSet):
     def transition(self, request, pk=None):
         order = self.get_object()
         order_services.change_order_status(
-            order, request.user, request.data.get("status", ""), (request.data.get("note") or "").strip()
+            order, request.user, request.data.get("status", ""), str(request.data.get("note") or "").strip()
         )
         order.refresh_from_db()
         return Response(self.get_serializer(order).data)
@@ -156,6 +168,8 @@ def place_order(request, pk):
         request.user, store, request.data.get("items") or [], request.data,
         bundles=request.data.get("bundles") or [], callback_url=_callback_url(request),
     )
+    if order.payment_method == Order.Payment.ONLINE:
+        order.payment_url = order_services.start_online_payment(order, _callback_url(request))
     return Response(OrderSerializer(order).data, status=201)
 
 
@@ -253,6 +267,8 @@ def wallet_admin_credit(request):
         amount = int(request.data.get("amount")) * 10
     except (TypeError, ValueError):
         raise ValidationError({"amount": "مبلغ را به تومان وارد کنید."})
+    if abs(amount) > 10**13:
+        raise ValidationError({"amount": "مبلغ بیش از حد مجاز است."})
     note = (request.data.get("note") or "اعتبار از طرف مدیر").strip()
     if amount > 0:
         w = wallet.credit(user, amount, WalletTx.Kind.ADMIN, note)
@@ -270,6 +286,24 @@ class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserAddress
         fields = ["id", "title", "address", "receiver_phone", "lat", "lng", "is_default"]
+
+    def validate_receiver_phone(self, v):
+        if not v:
+            return ""
+        try:
+            return normalize_mobile(v)
+        except Exception:  # noqa: BLE001
+            raise serializers.ValidationError("شماره تلفن تحویل‌گیرنده باید موبایل معتبر باشد.")
+
+    def validate_lat(self, v):
+        if v is not None and not -90 <= v <= 90:
+            raise serializers.ValidationError("عرض جغرافیایی نامعتبر است.")
+        return v
+
+    def validate_lng(self, v):
+        if v is not None and not -180 <= v <= 180:
+            raise serializers.ValidationError("طول جغرافیایی نامعتبر است.")
+        return v
 
 
 @api_view(["GET", "POST"])

@@ -11,7 +11,7 @@ _DIGITS = str.maketrans(_FA, _EN)
 
 
 def to_en_digits(value: str) -> str:
-    return (value or "").translate(_DIGITS)
+    return str(value if value is not None else "").translate(_DIGITS)
 
 
 def normalize_mobile(value: str) -> str:

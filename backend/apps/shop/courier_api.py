@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -76,7 +77,7 @@ class CourierViewSet(ScopedModelViewSet):
     def create(self, request, *args, **kwargs):
         d = request.data
         courier = courier_services.add_courier(
-            self._store(), d.get("mobile", ""), (d.get("first_name") or "").strip(), (d.get("last_name") or "").strip()
+            self._store(), str(d.get("mobile", "")), str(d.get("first_name") or "").strip(), str(d.get("last_name") or "").strip()
         )
         return Response(CourierSerializer(self.get_queryset().get(pk=courier.pk)).data, status=201)
 
@@ -89,7 +90,7 @@ class CourierViewSet(ScopedModelViewSet):
             courier.save(update_fields=["is_active", "updated_at"])
         if "fee_per_delivery" in request.data:
             try:
-                courier.fee_per_delivery = max(0, int(request.data["fee_per_delivery"]))
+                courier.fee_per_delivery = min(10**10, max(0, int(request.data["fee_per_delivery"])))
             except (TypeError, ValueError):
                 raise ValidationError({"fee_per_delivery": "کارمزد را به ریال و عدد وارد کنید."})
             courier.save(update_fields=["fee_per_delivery", "updated_at"])
@@ -99,7 +100,7 @@ class CourierViewSet(ScopedModelViewSet):
         u = courier.user
         for f in ("first_name", "last_name"):
             if f in request.data:
-                setattr(u, f, (request.data.get(f) or "").strip())
+                setattr(u, f, str(request.data.get(f) or "").strip()[:80])
         u.save(update_fields=["first_name", "last_name"])
         return Response(CourierSerializer(self.get_queryset().get(pk=courier.pk)).data)
 
@@ -121,9 +122,10 @@ class CourierViewSet(ScopedModelViewSet):
         })
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def settle(self, request, pk=None):
         """ثبت تسویه با پیک: {kind: cash|fee, amount (ریال), note}"""
-        c = self.get_object()
+        c = Courier.objects.select_for_update().get(pk=self.get_object().pk)     # قفل: دو تسویه هم‌زمان از مانده بیشتر نشود
         kind = request.data.get("kind")
         if kind not in CourierSettlement.Kind.values:
             raise ValidationError({"kind": "نوع تسویه نامعتبر است."})
@@ -258,7 +260,7 @@ def courier_pickup(request, pk):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def courier_deliver(request, pk):
-    return _act(request, pk, courier_services.deliver, (request.data.get("note") or "").strip())
+    return _act(request, pk, courier_services.deliver, str(request.data.get("note") or "").strip())
 
 
 @api_view(["POST"])
@@ -277,7 +279,11 @@ def assign_orders(request):
     store = request.user.stores.first()
     if request.user.role != "store" or not store:
         raise PermissionDenied("فقط مدیر فروشگاه می‌تواند سفارش را به پیک بسپارد.")
-    ids = [int(i) for i in (request.data.get("orders") or [])]
+    raw = request.data.get("orders") or []
+    try:
+        ids = [int(i) for i in raw][:200] if isinstance(raw, list) else []
+    except (TypeError, ValueError):
+        raise ValidationError({"orders": "شناسه سفارش‌ها نامعتبر است."})
     if not ids:
         raise ValidationError({"orders": "سفارشی انتخاب نشده است."})
     cid = request.data.get("courier")
@@ -285,6 +291,9 @@ def assign_orders(request):
         for o in Order.objects.filter(pk__in=ids, store=store):
             courier_services.unassign_order(o, request.user)
         return Response({"assigned": 0})
-    courier = get_object_or_404(Courier, pk=cid, store=store)
+    try:
+        courier = get_object_or_404(Courier, pk=int(cid), store=store)
+    except (TypeError, ValueError):
+        raise ValidationError({"courier": "پیک نامعتبر است."})
     orders = courier_services.assign_orders(store, courier, ids, request.user)
     return Response({"assigned": len(orders)})

@@ -222,13 +222,15 @@ class StoreViewSet(ScopedModelViewSet):
             raise ValidationError({"owner_mobile": "این شماره قبلا برای فروشگاه دیگری ثبت شده است."})
         if owner and owner.role not in (Role.CITIZEN, Role.STORE):
             raise ValidationError({"owner_mobile": "این شماره متعلق به یک کاربر سازمانی است."})
+        if owner and password:
+            # رمز حساب کسی که از قبل در سامانه هست را مسئول تعیین نمی‌کند (جلوگیری از تصاحب حساب)؛ با کد پیامکی وارد می‌شود
+            raise ValidationError({"password": "این شماره قبلا ثبت‌نام کرده و صاحبش با کد پیامکی وارد می‌شود؛ رمز برای او تعیین نمی‌شود."})
         if not owner:
             owner = User.objects.create_user(mobile, password=password or None)
-        if first or last:
-            owner.first_name, owner.last_name = first or owner.first_name, last or owner.last_name
+        first, last = str(first or "").strip()[:80], str(last or "").strip()[:80]
+        if (first and not owner.first_name) or (last and not owner.last_name):
+            owner.first_name, owner.last_name = owner.first_name or first, owner.last_name or last
         owner.role = Role.STORE
-        if password:
-            owner.set_password(password)
         owner.save()
 
         # فروشگاهی که مسئول خودش تعریف می‌کند از همان ابتدا فعال است
@@ -273,7 +275,7 @@ class StoreViewSet(ScopedModelViewSet):
     def set_password(self, request, pk=None):
         """تعیین یا بازنشانی رمز عبور مالک فروشگاه."""
         store = self.get_object()
-        password = (request.data.get("password") or "").strip()
+        password = str(request.data.get("password") or "").strip()
         if len(password) < 8:
             raise ValidationError({"password": "رمز عبور باید حداقل ۸ کاراکتر باشد."})
         store.owner.set_password(password)
@@ -284,7 +286,7 @@ class StoreViewSet(ScopedModelViewSet):
 
     def _set(self, request, new_status, need_reason=False):
         store = self.get_object()
-        reason = (request.data.get("reason") or "").strip()
+        reason = str(request.data.get("reason") or "").strip()
         if need_reason and not reason:
             raise ValidationError({"reason": "دلیل را بنویسید."})
         store.set_status(new_status, request.user, reason)
@@ -309,7 +311,8 @@ class StoreViewSet(ScopedModelViewSet):
     @action(detail=True, methods=["post"])
     def verify(self, request, pk=None):
         store = self.get_object()
-        store.is_verified = bool(request.data.get("value", True))
+        v = request.data.get("value", True)
+        store.is_verified = v not in (False, 0, "0", "false", "False", "")
         store.save(update_fields=["is_verified"])
         return Response(StoreSerializer(store, context={"request": request}).data)
 

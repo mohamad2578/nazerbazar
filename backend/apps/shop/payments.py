@@ -34,12 +34,23 @@ class Creds:
     own: bool = False      # درگاه اختصاصی فروشگاه (نه درگاه سامانه)
 
 
+def _is_test_merchant(provider: str, merchant: str, sandbox: bool) -> bool:
+    return bool(sandbox) or (provider == "zibal" and merchant.strip().lower() == "zibal")
+
+
 def _creds(store=None) -> Creds:
     if store is not None:
         fin = getattr(store, "finance", None)
         if fin and fin.own_gateway:
+            if _is_test_merchant(fin.gateway_provider, fin.gateway_merchant, fin.gateway_sandbox) and not settings.PAYMENT_ALLOW_MOCK and not settings.DEBUG:
+                # کد آزمایشی/سندباکس درگاه همیشه «پرداخت موفق» می‌دهد؛ روی سرور واقعی نباید پذیرفته شود
+                raise ValidationError({"payment_method": "درگاه این فروشگاه هنوز در حالت آزمایشی است؛ پرداخت اینترنتی فعلا ممکن نیست."})
             return Creds(fin.gateway_provider, fin.gateway_merchant, fin.gateway_sandbox, own=True)
-    return Creds(settings.PAYMENT_BACKEND, settings.ZARINPAL_MERCHANT_ID, settings.ZARINPAL_SANDBOX)
+    c = Creds(settings.PAYMENT_BACKEND, settings.ZARINPAL_MERCHANT_ID, settings.ZARINPAL_SANDBOX)
+    if c.provider not in ("zarinpal", "zibal") and not settings.PAYMENT_ALLOW_MOCK:
+        # بدون درگاه واقعی، «پرداخت موفق» قابل جعل است؛ پس پرداخت اینترنتی بسته می‌ماند
+        raise ValidationError({"payment_method": "پرداخت اینترنتی هنوز فعال نشده است؛ روش دیگری انتخاب کنید یا بعدا تلاش کنید."})
+    return c
 
 
 def _post_json(url: str, payload: dict) -> dict:
@@ -85,7 +96,9 @@ def start(user, amount: int, purpose: str, callback_url: str, order=None, descri
         store = None
     c = _creds(store)
     payment = Payment.objects.create(
-        user=user, purpose=purpose, order=order, amount=amount, gateway=c.provider, store=store if c.own else None
+        user=user, purpose=purpose, order=order, amount=amount, gateway=c.provider, store=store if c.own else None,
+        # اعتبار درگاه همان لحظه ثبت می‌شود تا تغییر تنظیمات فروشگاه وسط پرداخت، تایید را خراب نکند
+        merchant=c.merchant if c.own else "", sandbox=c.sandbox if c.own else False,
     )
     try:
         payment.authority, url = _request(c, payment, user, callback_url, description)
@@ -104,7 +117,12 @@ def start(user, amount: int, purpose: str, callback_url: str, order=None, descri
 
 def _verify_remote(payment: Payment) -> tuple[bool, str, str]:
     """تایید پرداخت نزد درگاه؛ (موفق؟، شماره پیگیری، توضیح خطا) را برمی‌گرداند."""
-    c = _creds(payment.store) if payment.store_id else Creds(payment.gateway, settings.ZARINPAL_MERCHANT_ID, settings.ZARINPAL_SANDBOX)
+    if payment.merchant:
+        c = Creds(payment.gateway, payment.merchant, payment.sandbox, own=True)
+    else:
+        c = Creds(payment.gateway, settings.ZARINPAL_MERCHANT_ID, settings.ZARINPAL_SANDBOX)
+    if payment.gateway not in ("zarinpal", "zibal") and not settings.PAYMENT_ALLOW_MOCK:
+        return False, "", "شبیه‌ساز درگاه روی سرور واقعی غیرفعال است"
     if payment.gateway == "zarinpal":
         r = _post_json(f"{_zp_base(c)}/pg/v4/payment/verify.json", {
             "merchant_id": c.merchant, "amount": payment.amount, "authority": payment.authority,
@@ -130,12 +148,13 @@ def verify(authority: str, ok: bool) -> Payment | None:
         return None
     if payment.status != Payment.Status.PENDING:
         return payment
-    if not ok:
+    if not ok and payment.gateway not in ("zarinpal", "zibal"):
         payment.status, payment.detail = Payment.Status.FAILED, "پرداخت انجام نشد یا لغو شد"
         payment.save(update_fields=["status", "detail"])
         _on_failed(payment)
         return payment
     try:
+        # حتی با «ناموفق» اعلام‌شده در آدرس بازگشت، نتیجه از خود درگاه پرسیده می‌شود (آدرس بازگشت قابل جعل است)
         paid, ref, err = _verify_remote(payment)
     except Exception as e:  # noqa: BLE001
         # نتیجه نامعلوم است؛ پرداخت در انتظار می‌ماند تا با تلاش دوباره تعیین تکلیف شود
@@ -144,7 +163,7 @@ def verify(authority: str, ok: bool) -> Payment | None:
         payment.save(update_fields=["detail"])
         return payment
     if not paid:
-        payment.status, payment.detail = Payment.Status.FAILED, err
+        payment.status, payment.detail = Payment.Status.FAILED, err or "پرداخت انجام نشد یا لغو شد"
         payment.save(update_fields=["status", "detail"])
         _on_failed(payment)
         return payment
@@ -161,7 +180,7 @@ def _on_paid(payment: Payment) -> None:
     if payment.purpose == Payment.Purpose.WALLET:
         wallet.credit(payment.user, payment.amount, WalletTx.Kind.TOPUP, f"شارژ اینترنتی — پیگیری {payment.ref_id}")
     elif payment.order_id:
-        order_services.mark_order_paid(payment.order)
+        order_services.mark_order_paid(payment.order, paid_amount=payment.amount)
 
 
 def _on_failed(payment: Payment) -> None:

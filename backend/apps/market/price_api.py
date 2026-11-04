@@ -64,7 +64,7 @@ def review_price(request, pk):
         scoped(OfficialPrice.objects.select_related("product__union"), request.user, OfficialPrice.SCOPE), pk=pk
     )
     approve = request.data.get("approve") not in (False, "false", "False", 0, "0")
-    do_review(record, request.user, approve, (request.data.get("note") or "").strip())
+    do_review(record, request.user, approve, str(request.data.get("note") or "").strip())
     return Response(PendingPriceSerializer(record).data)
 
 

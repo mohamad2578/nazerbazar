@@ -26,10 +26,46 @@ def _clean_qty(v) -> int:
         return 1
 
 
-def expire_unpaid_orders(store: Store) -> None:
+def _qty_map(rows, key: str) -> dict[int, int]:
+    """[{product|bundle: id, quantity: n}] را امن به {id: n} تبدیل می‌کند (ورودی نامعتبر → خطای ۴۰۰ نه ۵۰۰)."""
+    out: dict[int, int] = {}
+    if not isinstance(rows, list):
+        raise ValidationError({"items": "فهرست اقلام نامعتبر است."})
+    for r in rows[:100]:
+        if not isinstance(r, dict) or not r.get(key):
+            continue
+        try:
+            pk = int(r[key])
+        except (TypeError, ValueError):
+            raise ValidationError({"items": "شناسه کالا نامعتبر است."})
+        out[pk] = out.get(pk, 0) + _clean_qty(r.get("quantity"))
+    return out
+
+
+def _coord(v, lo: float, hi: float):
+    """مختصات جغرافیایی را اعتبارسنجی و به ۶ رقم اعشار گرد می‌کند؛ مقدار خالی None است."""
+    if v in (None, ""):
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise ValidationError({"address": "موقعیت نقشه نامعتبر است."})
+    if not lo <= f <= hi:
+        raise ValidationError({"address": "موقعیت نقشه نامعتبر است."})
+    return round(f, 6)
+
+
+def expire_unpaid_orders(store: Store | None = None, limit: int = 100) -> int:
+    """سفارش‌های اینترنتی پرداخت‌نشده‌ی قدیمی‌تر از مهلت را لغو و موجودی‌شان را آزاد می‌کند (دسته‌ای، با سقف)."""
     cutoff = timezone.now() - UNPAID_TTL
-    for o in Order.objects.filter(store=store, status=Order.Status.AWAITING_PAYMENT, created_at__lt=cutoff):
+    qs = Order.objects.filter(status=Order.Status.AWAITING_PAYMENT, created_at__lt=cutoff)
+    if store is not None:
+        qs = qs.filter(store=store)
+    n = 0
+    for o in qs.order_by("created_at")[:limit]:
         release_unpaid_order(o, "پرداخت در مهلت مقرر انجام نشد")
+        n += 1
+    return n
 
 
 @transaction.atomic
@@ -44,8 +80,10 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
     expire_unpaid_orders(store)
 
     # ── اقلام درخواستی (کالاهای تکی + اجزای بسته‌ها) ──
-    singles = {int(r["product"]): _clean_qty(r.get("quantity")) for r in rows if r.get("product")}
-    bundle_qty = {int(b["bundle"]): _clean_qty(b.get("quantity")) for b in bundles if b.get("bundle")}
+    singles = {pk: min(MAX_QTY, q) for pk, q in _qty_map(rows, "product").items()}
+    bundle_qty = {pk: min(MAX_QTY, q) for pk, q in _qty_map(bundles, "bundle").items()}
+    if not singles and not bundle_qty:
+        raise ValidationError({"items": "سبد خرید خالی است."})
     bundle_objs = {
         b.pk: b for b in ShopBundle.objects.filter(pk__in=bundle_qty, store=store, is_active=True).prefetch_related("items")
     }
@@ -84,10 +122,16 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
     # ── تحویل و نشانی ──
     phone = normalize_mobile(data.get("customer_phone") or customer.mobile)
     delivery = data.get("delivery") or Order.Delivery.PICKUP
-    address, lat, lng = (data.get("address") or "").strip(), data.get("lat") or None, data.get("lng") or None
+    if delivery not in Order.Delivery.values:
+        raise ValidationError({"delivery": "نحوه تحویل نامعتبر است."})
+    address = str(data.get("address") or "").strip()[:300]
+    lat, lng = _coord(data.get("lat"), -90, 90), _coord(data.get("lng"), -180, 180)
     if delivery == Order.Delivery.DELIVERY:
         if data.get("address_id"):
-            saved = UserAddress.objects.filter(pk=data["address_id"], user=customer).first()
+            try:
+                saved = UserAddress.objects.filter(pk=int(data["address_id"]), user=customer).first()
+            except (TypeError, ValueError):
+                saved = None
             if not saved:
                 raise ValidationError({"address": "نشانی انتخاب‌شده یافت نشد."})
             address, lat, lng = saved.address, saved.lat, saved.lng
@@ -111,8 +155,8 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
 
     order = Order.objects.create(
         code=tracking_code("S"), store=store, customer=customer,
-        customer_name=(data.get("customer_name") or customer.full_name or "مشتری").strip(), customer_phone=phone,
-        delivery=delivery, address=address, lat=lat, lng=lng, note=(data.get("note") or "").strip(),
+        customer_name=str(data.get("customer_name") or customer.full_name or "مشتری").strip()[:120], customer_phone=phone,
+        delivery=delivery, address=address, lat=lat, lng=lng, note=str(data.get("note") or "").strip()[:1000],
         payment_method=method,
         status=Order.Status.AWAITING_PAYMENT if method == Order.Payment.ONLINE else Order.Status.NEW,
     )
@@ -164,17 +208,29 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
         order.payment_status = Order.PaymentStatus.PAID
         order.save(update_fields=["payment_status"])
         _notify_store(order)
-    elif method == Order.Payment.ONLINE:
-        from . import payments
-
-        sep = "&" if "?" in callback_url else "?"
-        _, order.payment_url = payments.start(
-            customer, order.total, "order", f"{callback_url}{sep}order={order.code}", order=order,
-            description=f"سفارش {order.code} — {store.name}", store=store,
-        )
-    else:
+    elif method != Order.Payment.ONLINE:
         _notify_store(order)
+    # پرداخت اینترنتی: درخواست درگاه بعد از ثبت قطعی سفارش و بیرون از تراکنش انجام می‌شود (start_online_payment)
     return order
+
+
+def start_online_payment(order: Order, callback_url: str) -> str:
+    """درخواست پرداخت به درگاه برای سفارش «در انتظار پرداخت»؛ نشانی پرداخت را برمی‌گرداند.
+
+    اگر درگاه در دسترس نباشد، سفارش همین‌جا لغو و موجودی آزاد می‌شود تا چیزی بی‌دلیل معلق نماند.
+    """
+    from . import payments
+
+    sep = "&" if "?" in callback_url else "?"
+    try:
+        _, url = payments.start(
+            order.customer, order.total, "order", f"{callback_url}{sep}order={order.code}", order=order,
+            description=f"سفارش {order.code} — {order.store.name}", store=order.store,
+        )
+    except ValidationError:
+        release_unpaid_order(order, "درگاه پرداخت در دسترس نبود")
+        raise
+    return url
 
 
 def _notify_store(order: Order) -> None:
@@ -185,9 +241,12 @@ def _notify_store(order: Order) -> None:
 
 
 @transaction.atomic
-def mark_order_paid(order: Order) -> None:
+def mark_order_paid(order: Order, paid_amount: int = 0) -> None:
     order = Order.objects.select_for_update().get(pk=order.pk)
-    if order.payment_status == Order.PaymentStatus.PAID:
+    if order.payment_status in (Order.PaymentStatus.PAID, Order.PaymentStatus.REFUNDED):
+        # پرداخت دوم برای سفارشی که قبلا پرداخت شده؛ پول مشتری نمی‌سوزد و به کیف پولش برمی‌گردد
+        if paid_amount:
+            wallet.credit(order.customer, paid_amount, WalletTx.Kind.REFUND, f"پرداخت تکراری سفارش {order.code}", order=order)
         return
     if order.status == Order.Status.CANCELED:
         # پرداخت بعد از لغو (مثلا پس از انقضای مهلت) به کیف پول برمی‌گردد تا پول مشتری نسوزد
@@ -243,6 +302,7 @@ STORE_TRANSITIONS = {
 
 @transaction.atomic
 def change_order_status(order: Order, actor: User, status: str, note: str = "") -> Order:
+    note = str(note or "").strip()[:300]
     if status not in Order.Status.values:
         raise ValidationError({"status": "وضعیت نامعتبر است."})
     order = Order.objects.select_for_update().get(pk=order.pk)

@@ -1433,7 +1433,7 @@ class FeaturedShopTests(Base):
 
     def test_products_auto_approved_and_stock_hidden_from_customers(self):
         c = self.client_for(self.owner)
-        r = c.post("/api/shop-products/", {"name": "شکر", "price": 100, "old_price": 200, "unit": "kg", "stock": 7,
+        r = c.post("/api/shop-products/", {"name": "شکر", "price": 100_000, "old_price": 200_000, "unit": "kg", "stock": 7,
                                            "per_user_limit": 2, "is_special": True}, format="json")
         self.assertEqual((r.status_code, r.data["status"], r.data["stock"]), (201, "approved", 7))
         pub = APIClient().get(f"/api/public/stores/{self.fstore.pk}/shop/").data
@@ -1577,7 +1577,7 @@ class FeaturedShopTests(Base):
         import json
 
         c = self.client_for(self.owner)
-        r = c.post("/api/shop-bundles/", {"title": "ب", "price": 1, "is_active": "true",
+        r = c.post("/api/shop-bundles/", {"title": "ب", "price": 1000, "is_active": "true",
                                           "items": json.dumps([{"product": self.rice.pk, "quantity": 2}])}, format="multipart")
         self.assertEqual((r.status_code, r.data["items"][0]["quantity"]), (201, 2), r.data)
         self.rice.status = "pending"
@@ -1956,3 +1956,271 @@ class ErpTests(Base):
             r = self.order()
         self.assertEqual(r.status_code, 400)
         self.assertEqual(self.mgr.get("/api/erp/inventory/").data["results"][0]["stock"], None)       # سفارش ناموفق، موجودی دست‌نخورده
+
+
+class AuditHardeningTests(Base):
+    """موارد امنیتی و پایداری که در بازبینی کامل پروژه پیدا و بسته شد."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from apps.shop.models import ShopProduct
+
+        cls.owner = User.objects.create_user("09125558888", role=Role.STORE)
+        cls.fs = Store.objects.create(owner=cls.owner, name="ویژه", address="همدان", status=Store.Status.ACTIVE, is_featured=True)
+        cls.p = ShopProduct.objects.create(store=cls.fs, name="برنج", price=1_000_000, status="approved", stock=20, cost_price=700_000)
+        cls.buyer = User.objects.create_user("09126668888")
+
+    def order(self, **extra):
+        body = {"items": [{"product": self.p.pk, "quantity": 1}], "delivery": "delivery", "address": "همدان", "lat": "34.8",
+                "lng": "48.5", "payment_method": "online", **extra}
+        return self.client_for(self.buyer).post(f"/api/public/stores/{self.fs.pk}/order/", body, format="json")
+
+    def test_mock_gateway_is_refused_on_production_like_settings(self):
+        """بدون درگاه واقعی، «پرداخت موفق» نباید قابل جعل باشد (سفارش و شارژ کیف پول)."""
+        from django.test import override_settings
+
+        with override_settings(PAYMENT_ALLOW_MOCK=False, PAYMENT_BACKEND="console"):
+            r = self.order()
+            self.assertEqual(r.status_code, 400)
+            self.assertIn("payment_method", r.data)
+            w = self.client_for(self.buyer).post("/api/wallet/topup/", {"amount": 100_000}, format="json")
+            self.assertEqual(w.status_code, 400)
+        # سفارش ناموفق، موجودی را نگه نداشته است
+        from apps.shop.models import ShopProduct
+
+        self.assertEqual(ShopProduct.objects.get(pk=self.p.pk).stock, 20)
+
+    def test_forged_mock_callback_cannot_pay_when_mock_disabled(self):
+        from django.test import override_settings
+
+        o = self.order().data                                       # با شبیه‌ساز (آزمون) ساخته شد
+        from apps.shop.commerce import Payment
+
+        pay = Payment.objects.get(order_id=o["id"])
+        with override_settings(PAYMENT_ALLOW_MOCK=False):
+            APIClient().get(f"/api/public/payments/callback/?Authority={pay.authority}&Status=OK")
+        pay.refresh_from_db()
+        self.assertEqual(pay.status, "failed")
+        self.assertEqual(self.client_for(self.buyer).get("/api/public/orders/mine/").data[0]["payment_status"], "unpaid")
+
+    def test_duplicate_payment_of_same_order_is_returned_to_wallet(self):
+        from apps.shop import wallet
+
+        o = self.order().data
+        from apps.shop.commerce import Payment
+
+        first = Payment.objects.get(order_id=o["id"])
+        again = self.client_for(self.buyer).post(f"/api/public/orders/{o['code']}/pay/")      # پرداخت دوم برای همان سفارش
+        self.assertEqual(again.status_code, 200)
+        second = Payment.objects.filter(order_id=o["id"]).exclude(pk=first.pk).get()
+        for pay in (first, second):
+            APIClient().get(f"/api/public/payments/callback/?Authority={pay.authority}&Status=OK")
+        self.assertEqual(wallet.get_wallet(self.buyer).balance, 1_000_000)                  # یکی از دو پرداخت برگشت خورد
+        APIClient().get(f"/api/public/payments/callback/?Authority={second.authority}&Status=OK")   # بازگشت دوباره اثر ندارد
+        self.assertEqual(wallet.get_wallet(self.buyer).balance, 1_000_000)
+
+    def test_malformed_order_input_returns_400_not_500(self):
+        c = self.client_for(self.buyer)
+        url = f"/api/public/stores/{self.fs.pk}/order/"
+        base = {"delivery": "delivery", "address": "x", "lat": "34.8", "lng": "48.5", "payment_method": "online"}
+        bad = [
+            {**base, "items": [{"product": "abc"}]}, {**base, "items": "oops"}, {**base, "items": [5]},
+            {**base, "items": [{"product": self.p.pk}], "lat": "north", "lng": "1"}, {**base, "items": [{"product": self.p.pk}], "lat": "999"},
+            {**base, "items": [{"product": self.p.pk}], "delivery": "teleport"}, {**base, "items": [{"product": self.p.pk}], "address_id": "zz"},
+            {**base, "items": [], "bundles": [{"bundle": "x"}]},
+        ]
+        for body in bad:
+            self.assertEqual(c.post(url, body, format="json").status_code, 400, body)
+        long = self.order(customer_name="ع" * 500, note="ن" * 5000, address="آ" * 900)
+        self.assertEqual(long.status_code, 201)
+        self.assertLessEqual(len(long.data["customer_name"]), 120)
+
+    def test_tiny_prices_and_zero_limits_are_rejected(self):
+        c = self.client_for(self.owner)
+        r = c.post("/api/shop-products/", {"name": "رایگان", "price": 5, "unit": "piece"}, format="json")
+        self.assertEqual(r.status_code, 400)
+        r = c.post("/api/shop-products/", {"name": "محدود", "price": 5000, "unit": "piece", "per_user_limit": 0}, format="json")
+        self.assertEqual(r.status_code, 400)
+        r = c.post("/api/shop-bundles/", {"title": "ب", "price": 1, "items": [{"product": self.p.pk}]}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_cost_price_and_stock_not_exposed_to_officials_or_public(self):
+        """قیمت تمام‌شده و موجودی دقیق فقط برای مالک/مدیر کل؛ حتی مسئولان سازمانی در صفحه عمومی آن را نمی‌بینند."""
+        for client in (APIClient(), self.client_for(self.uni), self.client_for(self.cham), self.client_for(self.citizen)):
+            row = client.get(f"/api/public/stores/{self.fs.pk}/shop/").data[0]
+            for k in ("stock", "cost_price", "min_stock", "shelf"):
+                self.assertNotIn(k, row)
+        mine = self.client_for(self.owner).get(f"/api/public/stores/{self.fs.pk}/shop/").data[0]
+        self.assertEqual((mine["stock"], mine["cost_price"]), (20, 700_000))
+
+    def test_erp_input_bounds_and_csv_formula_injection(self):
+        from apps.shop.models import ShopProduct
+
+        m = self.client_for(self.owner)
+        huge = m.post(f"/api/erp/inventory/{self.p.pk}/adjust/", {"mode": "delta", "value": 10**12, "kind": "adjust"}, format="json")
+        self.assertEqual(huge.status_code, 400)
+        self.assertEqual(m.patch(f"/api/erp/inventory/{self.p.pk}/", {"cost_price": 10**30}, format="json").status_code, 400)
+        sid = m.post("/api/erp/suppliers/", {"name": "پخش"}, format="json").data["id"]
+        bad_items = m.post("/api/erp/purchases/", {"supplier": sid, "items": "x"}, format="json")
+        self.assertEqual(bad_items.status_code, 400)
+        self.assertEqual(m.post("/api/erp/purchases/", {"supplier": sid, "items": [3]}, format="json").status_code, 400)
+        ShopProduct.objects.filter(pk=self.p.pk).update(name="=HYPERLINK(\"http://evil\")")
+        csv_text = m.get("/api/erp/export/inventory/").content.decode("utf-8-sig")
+        self.assertNotIn("\n=HYPERLINK", csv_text)
+        self.assertIn("'=HYPERLINK", csv_text)
+        # بازه چندساله به ۴۰۰ روز محدود می‌شود
+        rep = m.get("/api/erp/reports/sales/", {"from": "2000-01-01", "to": "2026-01-01"}).data
+        self.assertLessEqual(len(rep["series"]), 401)
+
+    def test_wallet_admin_credit_has_upper_bound(self):
+        a = self.client_for(self.admin)
+        r = a.post("/api/wallet/admin-credit/", {"mobile": "09126668888", "amount": 10**15}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    # ───────── موارد بازبین مستقل ─────────
+
+    def test_gateway_failure_releases_stock_and_cancels_order(self):
+        from unittest import mock
+
+        from apps.shop.models import ShopProduct
+        from apps.shop.orders import Order
+
+        inv = self.client_for(self.owner)
+        inv.patch("/api/erp/settings/", {"gateway_provider": "zibal", "gateway_merchant": "REAL-MERCHANT", "gateway_active": True}, format="json")
+        with mock.patch("apps.shop.payments._post_json", return_value={"result": 102}):
+            r = self.order(items=[{"product": self.p.pk, "quantity": 3}])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(ShopProduct.objects.get(pk=self.p.pk).stock, 20)                    # موجودی برگشت
+        self.assertEqual(list(Order.objects.values_list("status", flat=True)), ["canceled"])  # سفارش معلق نماند
+
+    def test_test_merchant_and_sandbox_rejected_on_real_system(self):
+        from django.test import override_settings
+
+        m = self.client_for(self.owner)
+        with override_settings(PAYMENT_ALLOW_MOCK=False, DEBUG=False):
+            r = m.patch("/api/erp/settings/", {"gateway_provider": "zibal", "gateway_merchant": "zibal", "gateway_active": True}, format="json")
+            self.assertEqual(r.status_code, 400)
+            r = m.patch("/api/erp/settings/", {"gateway_provider": "zarinpal", "gateway_merchant": "X" * 36, "gateway_sandbox": True,
+                                              "gateway_active": True}, format="json")
+            self.assertEqual(r.status_code, 400)
+            ok = m.patch("/api/erp/settings/", {"gateway_provider": "zarinpal", "gateway_merchant": "X" * 36, "gateway_sandbox": False,
+                                               "gateway_active": True}, format="json")
+            self.assertEqual(ok.status_code, 200)
+
+    def test_cancelled_return_url_still_trusts_gateway_verification(self):
+        """Status=NOK در آدرس بازگشت قابل جعل است؛ اگر درگاه می‌گوید پرداخت شده، سفارش لغو نمی‌شود."""
+        from unittest import mock
+
+        from apps.shop.commerce import Payment
+
+        m = self.client_for(self.owner)
+        m.patch("/api/erp/settings/", {"gateway_provider": "zibal", "gateway_merchant": "REAL-MERCHANT", "gateway_active": True}, format="json")
+        with mock.patch("apps.shop.payments._post_json", return_value={"result": 100, "trackId": 777}):
+            o = self.order().data
+        pay = Payment.objects.get(order_id=o["id"])
+        self.assertEqual((pay.merchant, pay.sandbox), ("REAL-MERCHANT", False))
+        # فروشگاه وسط پرداخت تنظیمات درگاه را عوض می‌کند؛ تایید باید با اعتبار همان لحظه ثبت پرداخت انجام شود
+        m.patch("/api/erp/settings/", {"gateway_merchant": "OTHER-MERCHANT"}, format="json")
+        with mock.patch("apps.shop.payments._post_json", return_value={"result": 100, "amount": pay.amount, "refNumber": 5}) as v:
+            APIClient().get("/api/public/payments/callback/?trackId=777&success=0&status=3")
+        self.assertEqual(v.call_args.args[1]["merchant"], "REAL-MERCHANT")
+        self.assertEqual(self.client_for(self.buyer).get("/api/public/orders/mine/").data[0]["payment_status"], "paid")
+
+    def test_really_failed_payment_still_cancels_when_gateway_confirms_failure(self):
+        from unittest import mock
+
+        from apps.shop.commerce import Payment
+
+        self.client_for(self.owner).patch("/api/erp/settings/", {"gateway_provider": "zibal", "gateway_merchant": "REAL", "gateway_active": True}, format="json")
+        with mock.patch("apps.shop.payments._post_json", return_value={"result": 100, "trackId": 888}):
+            o = self.order().data
+        with mock.patch("apps.shop.payments._post_json", return_value={"result": 202}):
+            APIClient().get("/api/public/payments/callback/?trackId=888&success=0&status=3")
+        self.assertEqual(Payment.objects.get(order_id=o["id"]).status, "failed")
+        self.assertEqual(self.client_for(self.buyer).get("/api/public/orders/mine/").data[0]["status"], "canceled")
+
+    def test_store_creation_cannot_take_over_existing_account_with_password(self):
+        victim = User.objects.create_user("09125557771", first_name="قربانی")
+        victim.set_password("victim-pass-1234")
+        victim.save()
+        body = {"name": "فروشگاه جعلی", "address": "همدان", "union": self.union.pk, "owner_mobile": "09125557771", "password": "attacker-pass-1"}
+        r = self.client_for(self.uni).post("/api/stores/", body, format="json")
+        self.assertEqual(r.status_code, 400)
+        victim.refresh_from_db()
+        self.assertTrue(victim.check_password("victim-pass-1234"))
+        self.assertEqual(victim.role, Role.CITIZEN)
+        # بدون رمز، شماره موجود پذیرفته می‌شود و نام قبلی کاربر بازنویسی نمی‌شود
+        ok = self.client_for(self.uni).post("/api/stores/", {**body, "password": "", "owner_first_name": "دیگری"}, format="json")
+        self.assertEqual(ok.status_code, 201, ok.data)
+        victim.refresh_from_db()
+        self.assertEqual((victim.first_name, victim.role), ("قربانی", Role.STORE))
+
+    def test_oversight_roles_do_not_see_customer_address_or_phone(self):
+        from apps.shop.models import ShopProduct
+
+        shop = self.stores[0]
+        item = ShopProduct.objects.create(store=shop, name="عسل", price=500_000, status="approved")
+        r = self.client_for(self.buyer).post(f"/api/public/stores/{shop.pk}/order/", {
+            "items": [{"product": item.pk, "quantity": 1}], "delivery": "delivery", "address": "خیابان محرمانه ۱۲", "lat": "34.8",
+            "lng": "48.5", "payment_method": "cash"}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        row = self.client_for(self.uni).get("/api/orders/").data["results"][0]
+        self.assertEqual((row["address"], row["lat"], row["lng"]), ("", None, None))
+        self.assertIn("***", row["customer_phone"])
+        mine = self.client_for(shop.owner).get("/api/orders/").data["results"][0]
+        self.assertEqual((mine["address"], mine["customer_phone"]), ("خیابان محرمانه ۱۲", "09126668888"))
+
+    def test_public_filters_with_garbage_do_not_500(self):
+        c = APIClient()
+        for url in ("/api/public/shop-products/?category=abc&county=xyz", "/api/public/special-offers/?county=%00",
+                    f"/api/public/stores/{self.fs.pk}/shop/?category=abc"):
+            self.assertEqual(c.get(url).status_code, 200, url)
+
+    def test_long_notes_are_truncated_and_courier_inputs_validated(self):
+        owner = self.client_for(self.owner)
+        owner.post("/api/couriers/", {"mobile": "09125557772", "first_name": "ر" * 300, "last_name": 5}, format="json")
+        cu = User.objects.get(mobile="09125557772")
+        self.assertLessEqual(len(cu.first_name), 80)
+        o = self.order().data
+        self.assertEqual(owner.post("/api/orders/assign/", {"courier": "abc", "orders": [o["id"]]}, format="json").status_code, 400)
+        self.assertEqual(owner.post("/api/orders/assign/", {"courier": 1, "orders": "xyz"}, format="json").status_code, 400)
+        self.assertEqual(owner.post("/api/orders/assign/", {"courier": 1, "orders": ["a"]}, format="json").status_code, 400)
+        self.assertEqual(owner.get("/api/erp/movements/?product=abc").status_code, 400)
+        self.assertEqual(owner.get("/api/erp/purchases/?supplier=abc").status_code, 400)
+
+    def test_stale_unpaid_orders_are_released_by_daily_job_and_storefront_view(self):
+        from datetime import timedelta
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        from apps.shop.models import ShopProduct
+        from apps.shop.orders import Order
+
+        o = self.order(items=[{"product": self.p.pk, "quantity": 5}]).data
+        self.assertEqual(ShopProduct.objects.get(pk=self.p.pk).stock, 15)
+        Order.objects.filter(code=o["code"]).update(created_at=timezone.now() - timedelta(hours=2))
+        APIClient().get(f"/api/public/stores/{self.fs.pk}/shop/")                   # مشاهده ویترین هم کافی است
+        self.assertEqual(ShopProduct.objects.get(pk=self.p.pk).stock, 20)
+        o2 = self.order(items=[{"product": self.p.pk, "quantity": 4}]).data
+        Order.objects.filter(code=o2["code"]).update(created_at=timezone.now() - timedelta(hours=2))
+        call_command("daily_jobs")
+        self.assertEqual(ShopProduct.objects.get(pk=self.p.pk).stock, 20)
+        self.assertEqual(Order.objects.get(code=o2["code"]).status, "canceled")
+
+    def test_saved_address_validation(self):
+        c = self.client_for(self.buyer)
+        bad = {"title": "خانه", "address": "x", "lat": "34.8", "lng": "48.5"}
+        self.assertEqual(c.post("/api/my-addresses/", {**bad, "receiver_phone": "abc"}, format="json").status_code, 400)
+        self.assertEqual(c.post("/api/my-addresses/", {**bad, "lat": "95"}, format="json").status_code, 400)
+        ok = c.post("/api/my-addresses/", {**bad, "receiver_phone": "۰۹۱۲۱۲۳۴۵۶۷"}, format="json")
+        self.assertEqual((ok.status_code, ok.data["receiver_phone"]), (201, "09121234567"))
+
+    def test_verify_action_parses_false(self):
+        self.stores[0].is_verified = True
+        self.stores[0].save()
+        r = self.client_for(self.uni).post(f"/api/stores/{self.stores[0].pk}/verify/", {"value": "false"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.stores[0].refresh_from_db()
+        self.assertFalse(self.stores[0].is_verified)

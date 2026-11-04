@@ -2,6 +2,7 @@
 import csv
 from datetime import date
 
+from django.conf import settings
 from django.db.models import Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -34,7 +35,11 @@ class FeaturedOwner(BasePermission):
         return True
 
 
-def _int(v, field: str, default: int | None = 0, minimum: int = 0) -> int:
+MAX_MONEY = 10**13          # ۱ هزار میلیارد تومان؛ بالاتر از این قطعا خطای ورودی است
+MAX_QTY = 10**8
+
+
+def _int(v, field: str, default: int | None = 0, minimum: int = 0, maximum: int = MAX_MONEY) -> int:
     if v in (None, ""):
         if default is None:
             raise ValidationError({field: "این فیلد الزامی است."})
@@ -43,7 +48,7 @@ def _int(v, field: str, default: int | None = 0, minimum: int = 0) -> int:
         n = int(v)
     except (TypeError, ValueError):
         raise ValidationError({field: "عدد صحیح وارد کنید."})
-    if n < minimum:
+    if n < minimum or n > maximum:
         raise ValidationError({field: "مقدار نامعتبر است."})
     return n
 
@@ -85,6 +90,11 @@ class SettingsSerializer(serializers.ModelSerializer):
         active = a.get("gateway_active", getattr(self.instance, "gateway_active", False))
         if active and not (provider and merchant.strip()):
             raise serializers.ValidationError({"gateway_merchant": "برای فعال‌سازی درگاه، نوع درگاه و کد پذیرنده را وارد کنید."})
+        sandbox = a.get("gateway_sandbox", getattr(self.instance, "gateway_sandbox", False))
+        if active and not (settings.DEBUG or settings.PAYMENT_ALLOW_MOCK) and (
+            sandbox or (provider == "zibal" and merchant.strip().lower() == "zibal")
+        ):
+            raise serializers.ValidationError({"gateway_merchant": "کد آزمایشی یا حالت sandbox روی سامانه واقعی پذیرفته نمی‌شود؛ کد پذیرنده واقعی را وارد کنید."})
         return a
 
 
@@ -143,7 +153,7 @@ def inventory_update(request, pk):
     if "shelf" in d:
         p.shelf = str(d["shelf"]).strip()[:40]
     if "min_stock" in d:
-        p.min_stock = _int(d["min_stock"], "min_stock")
+        p.min_stock = _int(d["min_stock"], "min_stock", maximum=MAX_QTY)
     if "cost_price" in d:
         p.cost_price = _int(d["cost_price"], "cost_price")
     p.save(update_fields=["sku", "shelf", "min_stock", "cost_price", "updated_at"])
@@ -156,7 +166,7 @@ def inventory_adjust(request, pk):
     """تعدیل موجودی: {mode: set|delta, value, kind: adjust|damage|supplier_return|opening, note}"""
     p = get_object_or_404(ShopProduct, pk=pk, store=featured_store(request))
     d = request.data
-    value = _int(d.get("value"), "value", default=None, minimum=-10**9)
+    value = _int(d.get("value"), "value", default=None, minimum=-MAX_QTY, maximum=MAX_QTY)
     kind = d.get("kind") or StockMovement.Kind.ADJUST
     note = (d.get("note") or "").strip()
     if kind in (StockMovement.Kind.DAMAGE, StockMovement.Kind.SUPPLIER_RETURN) and not note:
@@ -193,7 +203,7 @@ class MovementViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         qs = StockMovement.objects.filter(store=featured_store(self.request)).select_related("product", "by")
         q = self.request.query_params
         if q.get("product"):
-            qs = qs.filter(product_id=q["product"])
+            qs = qs.filter(product_id=_int(q["product"], "product", maximum=2**31 - 1))
         if q.get("kind"):
             qs = qs.filter(kind=q["kind"])
         if q.get("from"):
@@ -237,7 +247,8 @@ class SupplierViewSet(viewsets.ModelViewSet):
         store = featured_store(request)
         sup = self.get_object()
         d = request.data
-        inv = PurchaseInvoice.objects.filter(pk=d.get("invoice"), store=store, supplier=sup).first() if d.get("invoice") else None
+        inv = (PurchaseInvoice.objects.filter(pk=_int(d.get("invoice"), "invoice", maximum=2**31 - 1), store=store, supplier=sup).first()
+               if d.get("invoice") else None)
         pay = inventory.pay_supplier(store, sup, _int(d.get("amount"), "amount", default=None, minimum=1), date=_date(d.get("date")),
                                      invoice=inv, method=d.get("method") or "", note=d.get("note") or "")
         return Response({"id": pay.pk, **erp_reports.supplier_balances(store)[sup.pk]}, status=201)
@@ -292,7 +303,7 @@ class PurchaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
             "items__product", "payments")
         q = self.request.query_params
         if q.get("supplier"):
-            qs = qs.filter(supplier_id=q["supplier"])
+            qs = qs.filter(supplier_id=_int(q["supplier"], "supplier", maximum=2**31 - 1))
         if q.get("search"):
             qs = qs.filter(Q(number__icontains=q["search"]) | Q(supplier__name__icontains=q["search"]))
         return qs
@@ -300,9 +311,13 @@ class PurchaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
     def create(self, request):
         store = featured_store(request)
         d = request.data
-        supplier = get_object_or_404(Supplier, pk=d.get("supplier"), store=store)
-        items = [{"product": _int(i.get("product"), "items", default=None), "qty": _int(i.get("qty"), "items", default=None, minimum=1),
-                  "unit_cost": _int(i.get("unit_cost"), "items", default=None, minimum=1)} for i in (d.get("items") or [])]
+        supplier = get_object_or_404(Supplier, pk=_int(d.get("supplier"), "supplier", default=None, maximum=2**31 - 1), store=store)
+        raw = d.get("items") or []
+        if not isinstance(raw, list) or not all(isinstance(i, dict) for i in raw) or len(raw) > 200:
+            raise ValidationError({"items": "فهرست اقلام نامعتبر است."})
+        items = [{"product": _int(i.get("product"), "items", default=None),
+                  "qty": _int(i.get("qty"), "items", default=None, minimum=1, maximum=MAX_QTY),
+                  "unit_cost": _int(i.get("unit_cost"), "items", default=None, minimum=1)} for i in raw]
         inv = inventory.create_purchase(
             store, supplier, items, date=_date(d.get("date")), number=str(d.get("number") or "").strip(),
             note=str(d.get("note") or "").strip(), discount=_int(d.get("discount"), "discount"), tax=_int(d.get("tax"), "tax"),
@@ -355,6 +370,20 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 # ───────────────────────── خروجی CSV ─────────────────────────
 
 
+class _SafeWriter:
+    """سلول متنی که با = + - @ شروع شود در اکسل «فرمول» حساب می‌شود؛ با یک نقل‌قول خنثی‌اش می‌کنیم."""
+
+    def __init__(self, w):
+        self.w = w
+
+    @staticmethod
+    def _cell(v):
+        return "'" + v if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
+
+    def writerow(self, row):
+        self.w.writerow([self._cell(v) for v in row])
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, FeaturedOwner])
 def export_csv(request, name):
@@ -364,7 +393,7 @@ def export_csv(request, name):
     out = HttpResponse(content_type="text/csv; charset=utf-8")
     out["Content-Disposition"] = f'attachment; filename="{name}-{start}-{end}.csv"'
     out.write("﻿")
-    w = csv.writer(out)
+    w = _SafeWriter(csv.writer(out))
     if name == "sales":
         rep = erp_reports.sales_report(store, start, end)
         w.writerow(["تاریخ", "تعداد سفارش", "درآمد کالا (ریال)", "بهای تمام‌شده (ریال)", "سود ناخالص (ریال)"])

@@ -82,6 +82,8 @@ class Payment(models.Model):
     amount = models.PositiveBigIntegerField("مبلغ (ریال)")
     store = models.ForeignKey("orgs.Store", null=True, blank=True, on_delete=models.SET_NULL, related_name="payments")
     gateway = models.CharField(max_length=20)
+    merchant = models.CharField(max_length=64, blank=True)       # فقط برای درگاه اختصاصی فروشگاه
+    sandbox = models.BooleanField(default=False)
     authority = models.CharField(max_length=64, blank=True, db_index=True)
     ref_id = models.CharField(max_length=64, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)

@@ -97,9 +97,9 @@ def citizen_register(request):
     from apps.core.utils import normalize_mobile
 
     mobile = normalize_mobile(request.data.get("mobile", ""))
-    password = (request.data.get("password") or "").strip()
-    first = (request.data.get("first_name") or "").strip()
-    last = (request.data.get("last_name") or "").strip()
+    password = str(request.data.get("password") or "").strip()
+    first = str(request.data.get("first_name") or "").strip()
+    last = str(request.data.get("last_name") or "").strip()
     errors = {}
     if not mobile:
         errors["mobile"] = "شماره موبایل معتبر وارد کنید."

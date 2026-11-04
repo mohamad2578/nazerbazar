@@ -9,7 +9,7 @@ from apps.accounts.models import User, notify
 from apps.core.utils import normalize_mobile, tracking_code
 from apps.orgs.models import Store
 
-from . import wallet
+from . import inventory, wallet
 from .commerce import ShopBundle, UserAddress, WalletTx
 from .models import ShopProduct
 from .orders import Order, OrderEvent, OrderItem
@@ -122,7 +122,8 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
     for pid, qty in singles.items():
         p = found[pid]
         OrderItem.objects.create(order=order, product=p, name=p.name, unit_display=p.get_unit_display(),
-                                 price=p.price, list_price=max(p.old_price or 0, p.price), quantity=qty)
+                                 price=p.price, list_price=max(p.old_price or 0, p.price), cost_price=p.cost_price,
+                                 quantity=qty)
         gross += p.price * qty
     for bid, bq in bundle_qty.items():
         b = bundle_objs[bid]
@@ -130,20 +131,30 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
         for it in b.items.all():
             p = found[it.product_id]
             OrderItem.objects.create(order=order, product=p, name=p.name, unit_display=p.get_unit_display(),
-                                     price=p.price, list_price=max(p.old_price or 0, p.price), bundle_name=b.title,
-                                     quantity=it.quantity * bq)
+                                     price=p.price, list_price=max(p.old_price or 0, p.price), cost_price=p.cost_price,
+                                     bundle_name=b.title, quantity=it.quantity * bq)
             unit_sum += p.price * it.quantity
         gross += unit_sum * bq
         discount += max(0, unit_sum - b.price) * bq
-    order.discount = discount
-    order.total = gross - discount
-    order.save(update_fields=["discount", "total"])
+    goods = gross - discount
+    tax = fee = 0
+    if store.is_featured:
+        # مالیات، هزینه ارسال و شماره فاکتور فقط برای فروشگاه ویژه (طبق تنظیمات مالی خودش)
+        fin = inventory.get_settings(store)
+        tax = round(goods * fin.vat_percent / 100)
+        if delivery == Order.Delivery.DELIVERY and fin.delivery_fee and (
+            fin.free_delivery_over is None or goods < fin.free_delivery_over
+        ):
+            fee = fin.delivery_fee
+        order.invoice_no = inventory.next_invoice_no(store)
+    order.discount, order.tax, order.delivery_fee = discount, tax, fee
+    order.total = goods + tax + fee
+    order.save(update_fields=["discount", "tax", "delivery_fee", "total", "invoice_no"])
 
     for pid, qty in need.items():
         p = found[pid]
         if p.stock is not None:
-            p.stock -= qty
-            p.save(update_fields=["stock", "updated_at"])
+            inventory.record(p.pk, -qty, inventory.Kind.SALE, ref=order.code, note=f"سفارش {order.code}")
     OrderEvent.objects.create(order=order, status=order.status, actor=customer, note="سفارش ثبت شد.")
 
     # ── پرداخت ──
@@ -159,7 +170,7 @@ def place_order(customer: User, store: Store, rows: list[dict], data: dict, bund
         sep = "&" if "?" in callback_url else "?"
         _, order.payment_url = payments.start(
             customer, order.total, "order", f"{callback_url}{sep}order={order.code}", order=order,
-            description=f"سفارش {order.code} — {store.name}",
+            description=f"سفارش {order.code} — {store.name}", store=store,
         )
     else:
         _notify_store(order)
@@ -196,8 +207,8 @@ def _restore_stock(order: Order) -> None:
     for it in order.items.select_related("product"):
         p = it.product
         if p and p.stock is not None:
-            ShopProduct.objects.filter(pk=p.pk).update(stock=p.stock + it.quantity)
-            p.stock += it.quantity
+            inventory.record(p.pk, it.quantity, inventory.Kind.SALE_CANCEL, ref=order.code,
+                             unit_cost=it.cost_price or None, note=f"لغو سفارش {order.code}")
 
 
 def _refund(order: Order, note: str) -> None:
@@ -252,6 +263,8 @@ def change_order_status(order: Order, actor: User, status: str, note: str = "") 
         order.closed_at = timezone.now()
     if status == Order.Status.DELIVERED:
         order.delivered_at = timezone.now()
+        if order.courier_id:
+            order.courier_fee = order.courier.fee_per_delivery
     if status == Order.Status.DELIVERED and order.payment_method == Order.Payment.CASH:
         order.payment_status = Order.PaymentStatus.PAID    # پول نقد هنگام تحویل دریافت شد
     order.save()

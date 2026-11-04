@@ -2,15 +2,16 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.views import ScopedModelViewSet
 
-from . import courier_services
+from . import courier_services, erp_reports
 from .commerce import Courier
+from .erp import CourierSettlement
 from .orders import Order
 
 
@@ -24,10 +25,26 @@ class CourierSerializer(serializers.ModelSerializer):
     on_road = serializers.IntegerField(read_only=True, default=0)
     delivered_today = serializers.IntegerField(read_only=True, default=0)
 
+    cash_on_hand = serializers.SerializerMethodField()
+    fee_due = serializers.SerializerMethodField()
+
     class Meta:
         model = Courier
-        fields = ["id", "name", "mobile", "store", "store_name", "is_active", "to_deliver", "on_road", "delivered_today"]
+        fields = ["id", "name", "mobile", "store", "store_name", "is_active", "is_online", "fee_per_delivery", "to_deliver",
+                  "on_road", "delivered_today", "cash_on_hand", "fee_due"]
         read_only_fields = ["store"]
+
+    def _ledger(self, c):
+        cache = self.context.setdefault("_ledger", {})
+        if c.pk not in cache:
+            cache[c.pk] = erp_reports.courier_ledger(c)
+        return cache[c.pk]
+
+    def get_cash_on_hand(self, c):
+        return self._ledger(c)["cash_on_hand"]
+
+    def get_fee_due(self, c):
+        return self._ledger(c)["fee_due"]
 
 
 class CourierViewSet(ScopedModelViewSet):
@@ -70,6 +87,15 @@ class CourierViewSet(ScopedModelViewSet):
         elif request.data.get("is_active") in (True, "true", "True"):
             courier.is_active = True
             courier.save(update_fields=["is_active", "updated_at"])
+        if "fee_per_delivery" in request.data:
+            try:
+                courier.fee_per_delivery = max(0, int(request.data["fee_per_delivery"]))
+            except (TypeError, ValueError):
+                raise ValidationError({"fee_per_delivery": "کارمزد را به ریال و عدد وارد کنید."})
+            courier.save(update_fields=["fee_per_delivery", "updated_at"])
+        if "is_online" in request.data:
+            courier.is_online = request.data["is_online"] in (True, "true", "True", 1, "1")
+            courier.save(update_fields=["is_online", "updated_at"])
         u = courier.user
         for f in ("first_name", "last_name"):
             if f in request.data:
@@ -80,6 +106,41 @@ class CourierViewSet(ScopedModelViewSet):
     def destroy(self, request, *args, **kwargs):
         courier_services.deactivate_courier(self.get_object())
         return Response(status=204)
+
+    @action(detail=True)
+    def ledger(self, request, pk=None):
+        """حساب پیک: وجه نقد دردست، کارمزد پرداخت‌نشده، تسویه‌ها و تحویل‌های اخیر."""
+        c = self.get_object()
+        recent = Order.objects.filter(courier=c, status=Order.Status.DELIVERED).order_by("-delivered_at")[:30]
+        return Response({
+            **erp_reports.courier_ledger(c),
+            "settlements": [{"id": s.pk, "kind": s.kind, "kind_display": s.get_kind_display(), "amount": s.amount, "note": s.note,
+                             "created_at": s.created_at} for s in c.settlements.all()[:50]],
+            "recent": [{"code": o.code, "customer": o.customer_name, "total": o.total, "payment": o.get_payment_method_display(),
+                            "fee": o.courier_fee, "delivered_at": o.delivered_at} for o in recent],
+        })
+
+    @action(detail=True, methods=["post"])
+    def settle(self, request, pk=None):
+        """ثبت تسویه با پیک: {kind: cash|fee, amount (ریال), note}"""
+        c = self.get_object()
+        kind = request.data.get("kind")
+        if kind not in CourierSettlement.Kind.values:
+            raise ValidationError({"kind": "نوع تسویه نامعتبر است."})
+        try:
+            amount = int(request.data.get("amount"))
+        except (TypeError, ValueError):
+            raise ValidationError({"amount": "مبلغ را به ریال وارد کنید."})
+        led = erp_reports.courier_ledger(c)
+        if amount <= 0:
+            raise ValidationError({"amount": "مبلغ باید بیشتر از صفر باشد."})
+        if kind == CourierSettlement.Kind.CASH_HANDOVER and amount > led["cash_on_hand"]:
+            raise ValidationError({"amount": f"مبلغ از وجه نقد دردست پیک ({led['cash_on_hand']:,} ریال) بیشتر است."})
+        if kind == CourierSettlement.Kind.FEE_PAYOUT and amount > led["fee_due"]:
+            raise ValidationError({"amount": f"مبلغ از کارمزد پرداخت‌نشده ({led['fee_due']:,} ریال) بیشتر است."})
+        CourierSettlement.objects.create(courier=c, kind=kind, amount=amount, note=(request.data.get("note") or "")[:200],
+                                         created_by=request.user)
+        return Response(erp_reports.courier_ledger(c), status=201)
 
 
 # ───────────────────────── اپلیکیشن پیک ─────────────────────────
@@ -127,7 +188,44 @@ class CourierOrderSerializer(serializers.ModelSerializer):
 @permission_classes([IsAuthenticated])
 def courier_me(request):
     c = _courier(request)
-    return Response({"id": c.pk, "name": c.user.full_name or c.user.mobile, "store": c.store.name})
+    return Response({"id": c.pk, "name": c.user.full_name or c.user.mobile, "store": c.store.name, "is_online": c.is_online,
+                     "fee_per_delivery": c.fee_per_delivery})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def courier_stats(request):
+    """آمار شخصی پیک: تحویل امروز/هفته/ماه، درآمد کارمزد، وجه نقد دردست و کارمزد دریافت‌نشده."""
+    from datetime import timedelta
+
+    c = _courier(request)
+    today = timezone.localdate()
+    done = Order.objects.filter(courier=c, status=Order.Status.DELIVERED)
+
+    def count(days):
+        return done.filter(delivered_at__date__gte=today - timedelta(days=days - 1)).count()
+
+    led = erp_reports.courier_ledger(c)
+    days = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        days.append({"date": d.isoformat(), "deliveries": done.filter(delivered_at__date=d).count()})
+    return Response({
+        "today": count(1), "week": count(7), "month": count(30), "total": led["deliveries"],
+        "fee_today": sum(o.courier_fee for o in done.filter(delivered_at__date=today)),
+        "cash_on_hand": led["cash_on_hand"], "fee_due": led["fee_due"], "fee_earned": led["fee_earned"], "days": days,
+        "active": Order.objects.filter(courier=c, status__in=(*courier_services.ASSIGNABLE, Order.Status.OUT_FOR_DELIVERY)).count(),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def courier_online(request):
+    """پیک خودش را آنلاین/آفلاین می‌کند؛ مدیر فروشگاه فقط به پیک آنلاین پیشنهاد سفارش می‌دهد."""
+    c = _courier(request)
+    c.is_online = request.data.get("online") in (True, "true", "True", 1, "1")
+    c.save(update_fields=["is_online", "updated_at"])
+    return Response({"is_online": c.is_online})
 
 
 @api_view(["GET"])

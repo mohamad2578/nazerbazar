@@ -51,7 +51,8 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             "id", "code", "store", "store_name", "store_phone", "store_address", "customer_name", "customer_phone",
-            "delivery", "delivery_display", "address", "lat", "lng", "note", "total", "discount", "list_total",
+            "delivery", "delivery_display", "address", "lat", "lng", "note", "total", "discount", "tax", "delivery_fee",
+            "invoice_no", "list_total",
             "savings", "payment_method", "payment_method_display", "payment_status", "payment_status_display",
             "status", "status_display", "store_note", "created_at", "items", "events", "payment_url",
             "courier", "courier_name", "courier_mobile", "assigned_at", "picked_at", "delivered_at",
@@ -69,7 +70,8 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_savings(self, o):
         """مجموع تخفیف: اختلاف قیمت مصرف‌کننده با قیمت فروش + تخفیف بسته‌ها."""
-        return self.get_list_total(o) - o.total
+        # صرفه‌جویی مشتری از قیمت کالاها است؛ مالیات و هزینه ارسال جزو تخفیف حساب نمی‌شود
+        return self.get_list_total(o) - (o.total - o.tax - o.delivery_fee)
 
     def get_payment_url(self, o):
         return getattr(o, "payment_url", "")
@@ -88,7 +90,7 @@ class OrderViewSet(ScopedModelViewSet):
     write_roles = ("store",)
     http_method_names = ["get", "post", "head", "options"]
     filterset_fields = ["status", "store", "delivery", "payment_status", "payment_method", "courier"]
-    search_fields = ["code", "customer_name", "customer_phone"]
+    search_fields = ["code", "customer_name", "customer_phone", "invoice_no"]
 
     def get_queryset(self):
         # سفارش پرداخت‌نشده‌ی اینترنتی هنوز سفارش فروشگاه نیست
@@ -106,6 +108,10 @@ class OrderViewSet(ScopedModelViewSet):
         order.refresh_from_db()
         return Response(self.get_serializer(order).data)
 
+    @action(detail=True)
+    def invoice(self, request, pk=None):
+        return Response(invoice_payload(self.get_object()))
+
     @action(detail=False)
     def summary(self, request):
         qs = self.get_queryset()
@@ -118,6 +124,23 @@ class OrderViewSet(ScopedModelViewSet):
         )
         agg["revenue"] = agg["revenue"] or 0
         return Response(agg)
+
+
+def invoice_payload(order: Order) -> dict:
+    """داده کامل فاکتور فروش: مشخصات فروشنده، خریدار، اقلام و جمع‌ها (برای چاپ در مرورگر)."""
+    from .inventory import get_settings
+
+    st = order.store
+    fin = get_settings(st) if st.is_featured else None
+    data = OrderSerializer(order).data
+    data["seller"] = {
+        "name": st.name, "address": st.address, "phone": st.phone, "photo": st.photo.url if st.photo else None,
+        "economic_code": fin.economic_code if fin else "", "national_id": fin.national_id if fin else "",
+        "postal_code": fin.postal_code if fin else "", "footer": fin.invoice_footer if fin else "",
+        "vat_percent": fin.vat_percent if fin else 0,
+    }
+    data["buyer"] = {"name": order.customer_name, "phone": order.customer_phone, "address": order.address}
+    return data
 
 
 def _callback_url(request) -> str:
@@ -152,6 +175,13 @@ def cancel_my_order(request, code):
     return Response(OrderSerializer(order).data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_order_invoice(request, code):
+    order = get_object_or_404(Order, code=code.upper(), customer=request.user)
+    return Response(invoice_payload(order))
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def pay_my_order(request, code):
@@ -160,7 +190,7 @@ def pay_my_order(request, code):
     if order.status != Order.Status.AWAITING_PAYMENT:
         raise ValidationError({"detail": "این سفارش در انتظار پرداخت نیست."})
     _, url = payments.start(request.user, order.total, "order", f"{_callback_url(request)}?order={order.code}",
-                            order=order, description=f"سفارش {order.code}")
+                            order=order, description=f"سفارش {order.code}", store=order.store)
     order.payment_url = url
     return Response(OrderSerializer(order).data)
 
@@ -169,8 +199,10 @@ def pay_my_order(request, code):
 @permission_classes([AllowAny])
 def payment_callback(request):
     """بازگشت کاربر از درگاه؛ پرداخت را تایید می‌کند و کاربر را به برنامه برمی‌گرداند."""
-    authority = request.query_params.get("Authority", "")
-    ok = request.query_params.get("Status", "").upper() == "OK"
+    q = request.query_params
+    # زرین‌پال: Authority و Status=OK ؛ زیبال: trackId و success=1
+    authority = q.get("Authority") or q.get("trackId") or ""
+    ok = q.get("Status", "").upper() == "OK" or q.get("success") == "1"
     payment = payments.verify(authority, ok) if authority else None
     paid = bool(payment and payment.status == "paid")
     if payment and payment.purpose == "wallet":

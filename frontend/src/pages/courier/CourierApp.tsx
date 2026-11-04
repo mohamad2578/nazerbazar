@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banknote, Bike, CheckCircle2, ChevronDown, LogOut, MapPin, Navigation, Package, Phone, RefreshCw, Store, XCircle } from "lucide-react";
+import { Banknote, Bike, CheckCircle2, ChevronDown, LogOut, MapPin, Navigation, Package, Phone, Power, RefreshCw, Store, TrendingUp, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { BarsChart } from "../../components/charts";
 import { Badge, Button, Card, cx, Empty, ErrorBox, Field, Loading, Segmented, Sheet, Textarea, useToast } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -24,16 +25,23 @@ export default function CourierApp() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"active" | "done">("active");
+  const [tab, setTab] = useState<"active" | "done" | "stats">("active");
   const [failing, setFailing] = useState<CourierOrder | null>(null);
-  const me = useQuery({ queryKey: ["courier-me"], queryFn: () => api.get<{ name: string; store: string }>("/courier/me/"), retry: false });
+  const me = useQuery({ queryKey: ["courier-me"], queryFn: () => api.get<{ name: string; store: string; is_online: boolean; fee_per_delivery: number }>("/courier/me/"), retry: false });
   const q = useQuery({
     queryKey: ["courier-orders", tab],
-    queryFn: () => api.get<CourierOrder[]>("/courier/orders/", { scope: tab }),
+    queryFn: () => api.get<CourierOrder[]>("/courier/orders/", { scope: tab === "done" ? "done" : "active" }),
     refetchInterval: 20_000,
-    enabled: me.isSuccess,
+    enabled: me.isSuccess && tab !== "stats",
   });
-  const refresh = () => qc.invalidateQueries({ queryKey: ["courier-orders"] });
+  const stats = useQuery({ queryKey: ["courier-stats"], queryFn: () => api.get<Stats>("/courier/stats/"), refetchInterval: 30_000, enabled: me.isSuccess });
+  const toast = useToast();
+  const online = useMutation({
+    mutationFn: (v: boolean) => api.post<{ is_online: boolean }>("/courier/online/", { online: v }),
+    onSuccess: (r) => { toast(r.is_online ? "آنلاین شدید؛ مدیر فروشگاه می‌تواند سفارش بفرستد" : "آفلاین شدید"); qc.invalidateQueries({ queryKey: ["courier-me"] }); },
+    onError: (e: Error) => toast(e.message, "danger"),
+  });
+  const refresh = () => { qc.invalidateQueries({ queryKey: ["courier-orders"] }); qc.invalidateQueries({ queryKey: ["courier-stats"] }); };
 
   if (me.isLoading) return <Loading />;
   if (me.error || !user?.is_courier)
@@ -65,13 +73,28 @@ export default function CourierApp() {
       </header>
 
       <div className="space-y-3 p-4">
-        <Segmented value={tab} onChange={setTab} options={[{ value: "active", label: "در جریان" }, { value: "done", label: "تحویل‌شده‌ها" }]} />
+        <button
+          onClick={() => online.mutate(!me.data?.is_online)}
+          className={cx("flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm", me.data?.is_online ? "border-ok/40 bg-ok-soft text-ok" : "border-line bg-surface-2 text-muted")}
+        >
+          <span className="flex items-center gap-2 font-medium"><Power className="size-5" /> {me.data?.is_online ? "آنلاین — آماده دریافت سفارش" : "آفلاین — برای دریافت سفارش آنلاین شوید"}</span>
+          <span className={cx("relative h-6 w-11 rounded-full transition", me.data?.is_online ? "bg-ok" : "bg-line")}><span className={cx("absolute top-0.5 size-5 rounded-full bg-white shadow transition-all", me.data?.is_online ? "right-0.5" : "right-[1.375rem]")} /></span>
+        </button>
+        {stats.data && (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-2xl bg-brand-soft p-2.5 text-brand"><div className="text-xl font-bold tabular">{num(stats.data.today)}</div><div className="text-[11px]">تحویل امروز</div></div>
+            <div className="rounded-2xl bg-ok-soft p-2.5 text-ok"><div className="text-sm font-bold tabular leading-7">{toman(stats.data.fee_today, false)}</div><div className="text-[11px]">کارمزد امروز</div></div>
+            <div className="rounded-2xl bg-warn-soft p-2.5 text-warn"><div className="text-xl font-bold tabular">{num(stats.data.active)}</div><div className="text-[11px]">سفارش فعال</div></div>
+          </div>
+        )}
+        <Segmented value={tab} onChange={setTab} options={[{ value: "active", label: "در جریان" }, { value: "done", label: "تحویل‌شده‌ها" }, { value: "stats", label: "آمار من" }]} />
+        {tab === "stats" && stats.data && <StatsPanel s={stats.data} fee={me.data?.fee_per_delivery ?? 0} />}
         {tab === "active" && cash > 0 && (
           <Card className="flex items-center gap-2 border-warn/40 bg-warn-soft p-3 text-sm text-warn">
             <Banknote className="size-5" /> وجه نقد دریافتی از مشتریانِ در مسیر: <b className="tabular">{toman(cash)}</b>
           </Card>
         )}
-        {q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} retry={() => q.refetch()} /> : !rows.length ? (
+        {tab === "stats" ? null : q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} retry={() => q.refetch()} /> : !rows.length ? (
           <Card><Empty title={tab === "active" ? "سفارشی به شما سپرده نشده" : "هنوز سفارشی تحویل نداده‌اید"} icon={<Package className="size-7" />}>
             {tab === "active" ? "وقتی مدیر فروشگاه لیست سفارش‌ها را بفرستد، همین‌جا می‌آید (هر ۲۰ ثانیه به‌روز می‌شود)." : undefined}
           </Empty></Card>
@@ -180,5 +203,33 @@ function FailSheet({ order, onClose, onDone }: { order: CourierOrder; onClose: (
         <Textarea value={reason} onChange={(e) => setReason(e.target.value)} className="min-h-24" />
       </Field>
     </Sheet>
+  );
+}
+
+type Stats = {
+  today: number; week: number; month: number; total: number; fee_today: number; cash_on_hand: number; fee_due: number; fee_earned: number; active: number;
+  days: { date: string; deliveries: number }[];
+};
+
+function StatsPanel({ s, fee }: { s: Stats; fee: number }) {
+  const days = s.days.map((d) => ({ ...d, label: d.date.slice(5) }));
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-2 text-center text-sm">
+        <Card className="p-3"><div className="text-xl font-bold tabular">{num(s.week)}</div><div className="text-[11px] text-muted">تحویل ۷ روز</div></Card>
+        <Card className="p-3"><div className="text-xl font-bold tabular">{num(s.month)}</div><div className="text-[11px] text-muted">تحویل ۳۰ روز</div></Card>
+        <Card className="p-3"><div className="text-xl font-bold tabular">{num(s.total)}</div><div className="text-[11px] text-muted">کل تحویل‌ها</div></Card>
+      </div>
+      <Card className="p-4">
+        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><TrendingUp className="size-4 text-brand" /> تحویل‌های ۷ روز اخیر</h3>
+        <BarsChart data={days} x="label" series={[{ key: "deliveries", label: "تحویل" }]} height={170} />
+      </Card>
+      <Card className="divide-y divide-line text-sm">
+        <div className="flex items-center justify-between px-4 py-3"><span>کارمزد هر تحویل</span><b className="tabular">{toman(fee)}</b></div>
+        <div className="flex items-center justify-between px-4 py-3"><span>کل کارمزد کسب‌شده</span><b className="tabular">{toman(s.fee_earned)}</b></div>
+        <div className="flex items-center justify-between px-4 py-3 text-warn"><span>کارمزد دریافت‌نشده از فروشگاه</span><b className="tabular">{toman(s.fee_due)}</b></div>
+        <div className="flex items-center justify-between px-4 py-3 text-warn"><span>وجه نقد دردست شما (باید تحویل فروشگاه شود)</span><b className="tabular">{toman(s.cash_on_hand)}</b></div>
+      </Card>
+    </div>
   );
 }

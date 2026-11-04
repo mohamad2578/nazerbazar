@@ -185,7 +185,7 @@ export function Stat({ label, value, sub, tone, icon }: { label: string; value: 
           </span>
         )}
       </div>
-      <div className="mt-2 text-2xl font-bold tabular">{value}</div>
+      <div className="mt-2 break-words text-xl font-bold tabular sm:text-2xl">{value}</div>
       {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
     </Card>
   );

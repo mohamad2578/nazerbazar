@@ -4,7 +4,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Badge, Button, Card, Empty, Loading, useToast } from "../../components/ui";
 import { api } from "../../lib/api";
 import { ago, dateTime, num, telLink, toman, webMapLink } from "../../lib/format";
-import { ORDER_TONE, PAY_TONE, printInvoice, type OrderT } from "../../lib/orders";
+import { printSalesInvoice, type InvoiceData } from "../../lib/erp";
+import { ORDER_TONE, PAY_TONE, type OrderT } from "../../lib/orders";
 
 /** سفارش‌های ثبت‌شده شهروند: شرح اقلام، میزان تخفیف، وضعیت پرداخت و فاکتور. */
 export default function MyOrders() {
@@ -112,7 +113,7 @@ export default function MyOrders() {
                   پرداخت سفارش
                 </Button>
               )}
-              <Button size="sm" variant="secondary" icon={<Printer className="size-4" />} onClick={() => printInvoice(o) || toast("اجازه باز شدن پنجره جدید را بدهید", "danger")}>
+              <Button size="sm" variant="secondary" icon={<Printer className="size-4" />} onClick={async () => { const d = await api.get<InvoiceData>(`/public/orders/${o.code}/invoice/`); printSalesInvoice(d) || toast("اجازه باز شدن پنجره جدید را بدهید", "danger"); }}>
                 فاکتور
               </Button>
               <a href={telLink(o.store_phone)} className={`inline-flex h-9 items-center gap-1.5 rounded-xl bg-surface-2 px-3 text-sm ${!o.store_phone && "pointer-events-none opacity-40"}`}>

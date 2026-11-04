@@ -5,7 +5,8 @@ import { Badge, Button, Card, Empty, Field, Loading, PageHeader, Segmented, Sele
 import { api, type Page } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ago, dateTime, num, telLink, toman, webMapLink } from "../../lib/format";
-import { ORDER_TONE, PAY_TONE, printInvoice, type OrderT } from "../../lib/orders";
+import { printSalesInvoice, type InvoiceData } from "../../lib/erp";
+import { ORDER_TONE, PAY_TONE, type OrderT } from "../../lib/orders";
 
 /** اقدام بعدی مجاز فروشنده در هر وضعیت */
 const NEXT: Record<string, { status: string; label: string }[]> = {
@@ -150,7 +151,7 @@ function OrderSheet({ order, canAct, onClose }: { order: OrderT; canAct: boolean
           <b className="tabular">{toman(order.total)}</b>
         </div>
       </div>
-      <Button className="mt-3 w-full" variant="secondary" icon={<Printer className="size-4" />} onClick={() => printInvoice(order) || toast("اجازه باز شدن پنجره جدید را بدهید", "danger")}>
+      <Button className="mt-3 w-full" variant="secondary" icon={<Printer className="size-4" />} onClick={async () => { const d = await api.get<InvoiceData>(`/orders/${order.id}/invoice/`); printSalesInvoice(d) || toast("اجازه باز شدن پنجره جدید را بدهید", "danger"); }}>
         چاپ فاکتور
       </Button>
 

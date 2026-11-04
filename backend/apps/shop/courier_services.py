@@ -114,9 +114,10 @@ def deliver(order_id: int, courier: Courier, note: str = "") -> Order:
         raise ValidationError({"detail": "ابتدا باید سفارش را از فروشگاه تحویل بگیرید."})
     now = timezone.now()
     order.status, order.delivered_at, order.closed_at = Order.Status.DELIVERED, now, now
+    order.courier_fee = courier.fee_per_delivery
     if order.payment_method == Order.Payment.CASH:
         order.payment_status = Order.PaymentStatus.PAID
-    order.save(update_fields=["status", "delivered_at", "closed_at", "payment_status", "updated_at"])
+    order.save(update_fields=["status", "delivered_at", "closed_at", "payment_status", "courier_fee", "updated_at"])
     OrderEvent.objects.create(order=order, status=order.status, actor=courier.user, note=note or "تحویل مشتری شد.")
     notify([order.customer], f"سفارش {order.code} تحویل شد", "از خرید شما سپاسگزاریم.", "/orders")
     notify([order.store.owner], f"سفارش {order.code} تحویل مشتری شد", f"پیک: {courier}", "/panel/orders")

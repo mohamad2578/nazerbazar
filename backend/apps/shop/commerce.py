@@ -80,6 +80,7 @@ class Payment(models.Model):
     purpose = models.CharField(max_length=10, choices=Purpose.choices)
     order = models.ForeignKey("shop.Order", null=True, blank=True, on_delete=models.PROTECT, related_name="payments")
     amount = models.PositiveBigIntegerField("مبلغ (ریال)")
+    store = models.ForeignKey("orgs.Store", null=True, blank=True, on_delete=models.SET_NULL, related_name="payments")
     gateway = models.CharField(max_length=20)
     authority = models.CharField(max_length=64, blank=True, db_index=True)
     ref_id = models.CharField(max_length=64, blank=True)
@@ -98,6 +99,8 @@ class Courier(TimeStamped):
     store = models.ForeignKey("orgs.Store", on_delete=models.CASCADE, related_name="couriers", verbose_name="فروشگاه")
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="courier_profile")
     is_active = models.BooleanField("فعال", default=True)
+    is_online = models.BooleanField("آنلاین (آماده دریافت سفارش)", default=True)
+    fee_per_delivery = models.PositiveBigIntegerField("کارمزد هر تحویل (ریال)", default=0)
 
     SCOPE = {"store": "store"}
 

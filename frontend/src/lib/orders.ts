@@ -7,7 +7,8 @@ export type OrderItemT = {
 export type OrderT = {
   id: number; code: string; store: number; store_name: string; store_phone: string; store_address: string;
   customer_name: string; customer_phone: string; delivery: string; delivery_display: string; address: string;
-  lat: string | null; lng: string | null; note: string; total: number; discount: number; list_total: number; savings: number;
+  lat: string | null; lng: string | null; note: string; total: number; discount: number; tax: number; delivery_fee: number; invoice_no: string;
+  list_total: number; savings: number;
   payment_method: string; payment_method_display: string; payment_status: string; payment_status_display: string;
   status: string; status_display: string; store_note: string; created_at: string; payment_url?: string;
   courier: number | null; courier_name: string; courier_mobile: string; assigned_at: string | null; delivered_at: string | null;

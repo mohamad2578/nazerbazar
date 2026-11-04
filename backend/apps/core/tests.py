@@ -1720,3 +1720,239 @@ class CourierTests(Base):
         self.assertEqual(self.mgr.post("/api/orders/assign/", {"courier": cid2, "orders": [o3]}, format="json").status_code, 200)
         self.assertEqual(self.mgr.post("/api/orders/assign/", {"courier": None, "orders": [o3]}, format="json").status_code, 200)
         self.assertIsNone(self.client_for(self.citizen).get("/api/public/orders/mine/").data[0]["courier"])
+
+
+class ErpTests(Base):
+    """انبارداری، حسابداری، فاکتور و درگاه اختصاصی فروشگاه ویژه."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from apps.shop.models import ShopProduct
+
+        cls.owner = User.objects.create_user("09125559999", role=Role.STORE)
+        cls.fs = Store.objects.create(owner=cls.owner, name="ویژه", address="همدان", status=Store.Status.ACTIVE, is_featured=True)
+        cls.rice = ShopProduct.objects.create(store=cls.fs, name="برنج", price=1_000_000, old_price=1_200_000, status="approved")
+        cls.oil = ShopProduct.objects.create(store=cls.fs, name="روغن", price=500_000, status="approved")
+        cls.buyer = User.objects.create_user("09126667777", first_name="علی", last_name="رضایی")
+
+    def setUp(self):
+        self.mgr = self.client_for(self.owner)
+
+    def supplier(self):
+        r = self.mgr.post("/api/erp/suppliers/", {"name": "پخش مرکزی", "phone": "081"}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        return r.data["id"]
+
+    def buy(self, sid, items, **extra):
+        return self.mgr.post("/api/erp/purchases/", {"supplier": sid, "date": "2026-10-01", "items": items, **extra}, format="json")
+
+    def order(self, product=None, qty=1, user=None, **extra):
+        body = {"items": [{"product": (product or self.rice).pk, "quantity": qty}], "delivery": "delivery", "address": "همدان",
+                "lat": "34.8", "lng": "48.5", "payment_method": "online", **extra}
+        return self.client_for(user or self.buyer).post(f"/api/public/stores/{self.fs.pk}/order/", body, format="json")
+
+    def pay(self, order):
+        from apps.shop.commerce import Payment
+
+        pay = Payment.objects.filter(order_id=order["id"]).latest("id")
+        self.assertEqual(APIClient().get(f"/api/public/payments/callback/?Authority={pay.authority}&Status=OK").status_code, 302)
+
+    def deliver(self, oid):
+        for st in ("confirmed", "ready", "delivered"):
+            self.assertEqual(self.mgr.post(f"/api/orders/{oid}/transition/", {"status": st}).status_code, 200, st)
+
+    # ── دسترسی ──
+    def test_only_featured_owner_can_use_erp(self):
+        self.assertEqual(self.mgr.get("/api/erp/dashboard/").status_code, 200)
+        self.assertEqual(self.client_for(self.stores[0].owner).get("/api/erp/dashboard/").status_code, 403)
+        self.assertEqual(self.client_for(self.citizen).get("/api/erp/inventory/").status_code, 403)
+        self.assertEqual(APIClient().get("/api/erp/settings/").status_code, 401)
+
+    # ── خرید، میانگین موزون و دفتر انبار ──
+    def test_purchase_updates_stock_weighted_cost_and_ledger(self):
+        from apps.shop.models import ShopProduct
+
+        sid = self.supplier()
+        r = self.buy(sid, [{"product": self.rice.pk, "qty": 10, "unit_cost": 100_000}], shipping=50_000, paid=300_000)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["total"], 1_050_000)
+        p = ShopProduct.objects.get(pk=self.rice.pk)
+        self.assertEqual((p.stock, p.cost_price), (10, 105_000))                      # حمل در قیمت تمام‌شده تسهیم شد
+        self.buy(sid, [{"product": self.rice.pk, "qty": 10, "unit_cost": 125_000}])
+        p.refresh_from_db()
+        self.assertEqual((p.stock, p.cost_price), (20, 115_000))                      # میانگین موزون
+        mv = self.mgr.get("/api/erp/movements/", {"product": self.rice.pk}).data["results"]
+        self.assertEqual([(m["kind"], m["qty"], m["balance_after"]) for m in mv], [("purchase", 10, 20), ("purchase", 10, 10)])
+        sup = self.mgr.get("/api/erp/suppliers/").data[0]
+        self.assertEqual((sup["purchased"], sup["paid"], sup["balance"]), (2_300_000, 300_000, 2_000_000))
+        pay = self.mgr.post(f"/api/erp/suppliers/{sid}/pay/", {"amount": 1_000_000, "date": "2026-10-02"}, format="json")
+        self.assertEqual((pay.status_code, pay.data["balance"]), (201, 1_000_000))
+        led = self.mgr.get(f"/api/erp/suppliers/{sid}/ledger/").data
+        self.assertEqual(led["balance"], 1_000_000)
+        # فاکتور نامعتبر
+        self.assertEqual(self.buy(sid, [{"product": self.rice.pk, "qty": 1, "unit_cost": 10}], paid=999).status_code, 400)
+        self.assertEqual(self.buy(sid, []).status_code, 400)
+        other = self.stores[0].shop_products.create(name="x", price=1, status="approved")
+        self.assertEqual(self.buy(sid, [{"product": other.pk, "qty": 1, "unit_cost": 10}]).status_code, 400)
+
+    def test_adjustments_damage_and_negative_guard(self):
+        sid = self.supplier()
+        self.buy(sid, [{"product": self.oil.pk, "qty": 20, "unit_cost": 300_000}])
+        adj = lambda **kw: self.mgr.post(f"/api/erp/inventory/{self.oil.pk}/adjust/", kw, format="json")  # noqa: E731
+        r = adj(mode="set", value=15, note="انبارگردانی")
+        self.assertEqual((r.status_code, r.data["stock"]), (200, 15))
+        self.assertEqual(adj(mode="delta", value=3, kind="damage").status_code, 400)                  # دلیل لازم است
+        r = adj(mode="delta", value=3, kind="damage", note="شکسته")
+        self.assertEqual(r.data["stock"], 12)                                                          # ضایعات همیشه کاهشی
+        self.assertEqual(adj(mode="delta", value=-99, kind="adjust").status_code, 400)               # منفی نمی‌شود
+        self.assertEqual(adj(mode="set", value=12).status_code, 400)                                   # بدون تغییر
+        rows = self.mgr.get("/api/erp/inventory/", {"q": "روغن"}).data
+        self.assertEqual((rows["results"][0]["stock"], rows["summary"]["cost_value"]), (12, 12 * 300_000))
+        upd = self.mgr.patch(f"/api/erp/inventory/{self.oil.pk}/", {"min_stock": 20, "sku": "OIL-1", "shelf": "A2"}, format="json")
+        self.assertEqual(upd.status_code, 200)
+        low = self.mgr.get("/api/erp/inventory/", {"status": "low"}).data["results"]
+        self.assertEqual([r["name"] for r in low], ["روغن"])
+
+    # ── فروش: موجودی، قیمت تمام‌شده، مالیات، ارسال و شماره فاکتور ──
+    def test_sale_moves_stock_snapshots_cost_and_cancel_returns_it(self):
+        from apps.shop.orders import OrderItem
+
+        sid = self.supplier()
+        self.buy(sid, [{"product": self.rice.pk, "qty": 10, "unit_cost": 400_000}])
+        o = self.order(qty=3).data
+        item = OrderItem.objects.get(order_id=o["id"])
+        self.assertEqual(item.cost_price, 400_000)
+        mv = self.mgr.get("/api/erp/movements/", {"product": self.rice.pk}).data["results"]
+        self.assertEqual((mv[0]["kind"], mv[0]["qty"], mv[0]["balance_after"], mv[0]["ref"]), ("sale", -3, 7, o["code"]))
+        self.client_for(self.buyer).post(f"/api/public/orders/{o['code']}/cancel/")
+        mv = self.mgr.get("/api/erp/movements/", {"product": self.rice.pk}).data["results"]
+        self.assertEqual((mv[0]["kind"], mv[0]["qty"], mv[0]["balance_after"]), ("sale_cancel", 3, 10))
+
+    def test_low_stock_notification_fires_once_when_crossing_threshold(self):
+        sid = self.supplier()
+        self.buy(sid, [{"product": self.rice.pk, "qty": 10, "unit_cost": 400_000}])
+        self.mgr.patch(f"/api/erp/inventory/{self.rice.pk}/", {"min_stock": 4}, format="json")
+        self.order(qty=3)                                              # ۷ باقی می‌ماند: هنوز بالای حد
+        self.assertFalse(self.owner.notifications.filter(title__contains="کمبود موجودی").exists())
+        self.order(qty=3, user=User.objects.create_user("09126667770"))    # ۴ باقی می‌ماند: عبور از حد
+        self.order(qty=1, user=User.objects.create_user("09126667771"))    # ۳ باقی می‌ماند: اعلان دوباره نمی‌رود
+        self.assertEqual(self.owner.notifications.filter(title__contains="کمبود موجودی").count(), 1)
+
+    def test_vat_delivery_fee_invoice_numbers_and_free_shipping(self):
+        r = self.mgr.patch("/api/erp/settings/", {"vat_percent": 10, "delivery_fee": 400_000, "free_delivery_over": 5_000_000,
+                                                 "economic_code": "411", "invoice_prefix": "NZ"}, format="json")
+        self.assertEqual((r.status_code, r.data["next_invoice"]), (200, "NZ000001"))
+        o1 = self.order(qty=2).data                                    # کالا ۲٬۰۰۰٬۰۰۰ + مالیات ۲۰۰٬۰۰۰ + ارسال ۴۰۰٬۰۰۰
+        self.assertEqual((o1["tax"], o1["delivery_fee"], o1["total"], o1["invoice_no"]), (200_000, 400_000, 2_600_000, "NZ000001"))
+        self.assertEqual(o1["savings"], 2 * 1_200_000 - 2_000_000)      # مالیات و ارسال تخفیف حساب نمی‌شود
+        o2 = self.order(qty=6, user=User.objects.create_user("09126667778")).data      # بالای سقف ارسال رایگان
+        self.assertEqual((o2["delivery_fee"], o2["tax"], o2["invoice_no"]), (0, 600_000, "NZ000002"))
+        self.assertEqual(self.mgr.patch("/api/erp/settings/", {"vat_percent": 50}, format="json").status_code, 400)
+        self.pay(o1)                                                    # سفارش پرداخت‌نشده هنوز در کارتابل فروشگاه نیست
+        inv = self.mgr.get(f"/api/orders/{o1['id']}/invoice/").data
+        self.assertEqual((inv["seller"]["economic_code"], inv["seller"]["vat_percent"], inv["buyer"]["name"]), ("411", 10, "علی رضایی"))
+        mine = self.client_for(self.buyer).get(f"/api/public/orders/{o1['code']}/invoice/")
+        self.assertEqual((mine.status_code, mine.data["invoice_no"]), (200, "NZ000001"))
+        self.assertEqual(self.client_for(self.citizen).get(f"/api/public/orders/{o1['code']}/invoice/").status_code, 404)
+
+    # ── گزارش سود ──
+    def test_profit_report_and_dashboard(self):
+        from django.utils import timezone
+
+        sid = self.supplier()
+        self.buy(sid, [{"product": self.rice.pk, "qty": 20, "unit_cost": 600_000}])
+        self.mgr.patch("/api/erp/settings/", {"delivery_fee": 100_000}, format="json")
+        o = self.order(qty=2).data                                    # درآمد ۲٬۰۰۰٬۰۰۰ ، بهای تمام‌شده ۱٬۲۰۰٬۰۰۰ ، ارسال ۱۰۰٬۰۰۰
+        self.pay(o)
+        self.deliver(o["id"])
+        today = str(timezone.localdate())
+        self.assertEqual(self.mgr.post("/api/erp/expenses/", {"category": "packaging", "amount": 50_000, "date": today}, format="json").status_code, 201)
+        self.assertEqual(self.mgr.post("/api/erp/expenses/", {"category": "rent", "amount": 0, "date": today}, format="json").status_code, 400)
+        rep = self.mgr.get("/api/erp/reports/sales/", {"from": today, "to": today}).data
+        t = rep["totals"]
+        self.assertEqual((t["orders"], t["revenue"], t["cogs"], t["gross_profit"]), (1, 2_000_000, 1_200_000, 800_000))
+        self.assertEqual((t["delivery_income"], t["expenses"], t["net_profit"]), (100_000, 50_000, 850_000))
+        self.assertEqual((rep["by_product"][0]["name"], rep["by_product"][0]["margin"]), ("برنج", 40.0))
+        self.assertEqual(rep["by_method"][0]["payment_method"], "online")
+        dash = self.mgr.get("/api/erp/dashboard/").data
+        self.assertEqual((dash["today"]["net_profit"], dash["stock_value"], dash["payables"]), (850_000, 18 * 600_000, 12_000_000))
+        csv_resp = self.mgr.get("/api/erp/export/sales/", {"from": today, "to": today})
+        self.assertEqual(csv_resp.status_code, 200)
+        self.assertIn("برنج", csv_resp.content.decode("utf-8-sig"))
+        self.assertEqual(self.mgr.get("/api/erp/export/inventory/").status_code, 200)
+        self.assertEqual(self.mgr.get("/api/erp/export/nothing/").status_code, 400)
+
+    # ── حساب پیک ──
+    def test_courier_fee_online_toggle_stats_and_settlement(self):
+        cid = self.mgr.post("/api/couriers/", {"mobile": "09128880077", "first_name": "رضا"}, format="json").data["id"]
+        self.assertEqual(self.mgr.patch(f"/api/couriers/{cid}/", {"fee_per_delivery": 300_000}, format="json").data["fee_per_delivery"], 300_000)
+        o = self.order().data
+        self.pay(o)
+        self.mgr.post(f"/api/orders/{o['id']}/transition/", {"status": "confirmed"})
+        self.mgr.post(f"/api/orders/{o['id']}/transition/", {"status": "ready"})
+        self.mgr.post("/api/orders/assign/", {"courier": cid, "orders": [o["id"]]}, format="json")
+        cu = User.objects.get(mobile="09128880077")
+        c = self.client_for(cu)
+        c.post(f"/api/courier/orders/{o['id']}/pickup/")
+        c.post(f"/api/courier/orders/{o['id']}/deliver/")
+        st = c.get("/api/courier/stats/").data
+        self.assertEqual((st["today"], st["fee_today"], st["fee_due"], st["active"]), (1, 300_000, 300_000, 0))
+        self.assertEqual(c.post("/api/courier/online/", {"online": False}, format="json").data["is_online"], False)
+        self.assertFalse(self.mgr.get("/api/couriers/").data[0]["is_online"])
+        led = self.mgr.get(f"/api/couriers/{cid}/ledger/").data
+        self.assertEqual((led["deliveries"], led["fee_due"], led["cash_on_hand"], len(led["recent"])), (1, 300_000, 0, 1))
+        self.assertEqual(self.mgr.post(f"/api/couriers/{cid}/settle/", {"kind": "fee", "amount": 400_000}, format="json").status_code, 400)
+        self.assertEqual(self.mgr.post(f"/api/couriers/{cid}/settle/", {"kind": "cash", "amount": 1}, format="json").status_code, 400)
+        r = self.mgr.post(f"/api/couriers/{cid}/settle/", {"kind": "fee", "amount": 300_000, "note": "نقدی"}, format="json")
+        self.assertEqual((r.status_code, r.data["fee_due"]), (201, 0))
+
+    def test_courier_cash_on_hand_for_cash_orders(self):
+        from apps.shop.orders import Order
+
+        cid = self.mgr.post("/api/couriers/", {"mobile": "09128880078"}, format="json").data["id"]
+        o = self.order().data
+        Order.objects.filter(pk=o["id"]).update(payment_method="cash", status="ready", courier_id=cid)
+        c = self.client_for(User.objects.get(mobile="09128880078"))
+        c.post(f"/api/courier/orders/{o['id']}/pickup/")
+        c.post(f"/api/courier/orders/{o['id']}/deliver/")
+        led = self.mgr.get(f"/api/couriers/{cid}/ledger/").data
+        self.assertEqual((led["cash_collected"], led["cash_on_hand"]), (1_000_000, 1_000_000))
+        self.assertEqual(self.mgr.post(f"/api/couriers/{cid}/settle/", {"kind": "cash", "amount": 1_000_000}, format="json").data["cash_on_hand"], 0)
+
+    # ── درگاه اختصاصی فروشگاه ──
+    def test_store_own_gateway_is_used_for_its_orders(self):
+        from unittest import mock
+
+        from apps.shop.commerce import Payment
+
+        bad = self.mgr.patch("/api/erp/settings/", {"gateway_active": True}, format="json")
+        self.assertEqual(bad.status_code, 400)                                    # بدون نوع درگاه و کد پذیرنده فعال نمی‌شود
+        r = self.mgr.patch("/api/erp/settings/", {"gateway_provider": "zibal", "gateway_merchant": "MERCH1", "gateway_active": True}, format="json")
+        self.assertEqual((r.status_code, r.data["own_gateway"]), (200, True))
+        with mock.patch("apps.shop.payments._post_json", return_value={"result": 100, "trackId": 4455}) as post:
+            o = self.order().data
+        self.assertEqual(o["payment_url"], "https://gateway.zibal.ir/start/4455")
+        self.assertEqual(post.call_args.args[1]["merchant"], "MERCH1")
+        pay = Payment.objects.get(order_id=o["id"])
+        self.assertEqual((pay.gateway, pay.store_id, pay.authority), ("zibal", self.fs.pk, "4455"))
+        with mock.patch("apps.shop.payments._post_json", return_value={"result": 100, "amount": pay.amount, "refNumber": 99}) as v:
+            cb = APIClient().get("/api/public/payments/callback/?trackId=4455&success=1&status=2")
+        self.assertIn("pay=ok", cb["Location"])
+        self.assertEqual(v.call_args.args[1], {"merchant": "MERCH1", "trackId": 4455})
+        self.assertEqual(self.client_for(self.buyer).get("/api/public/orders/mine/").data[0]["payment_status"], "paid")
+        # شارژ کیف پول همیشه با درگاه سامانه است نه درگاه فروشگاه
+        w = self.client_for(self.buyer).post("/api/wallet/topup/", {"amount": 100_000}, format="json")
+        self.assertIn("Authority=MOCK", w.data["payment_url"])
+        # با غیرفعال‌شدن درگاه اختصاصی، پرداخت به درگاه سامانه برمی‌گردد
+        self.mgr.patch("/api/erp/settings/", {"gateway_active": False}, format="json")
+        self.assertIn("Authority=MOCK", self.order(user=User.objects.create_user("09126667779")).data["payment_url"])
+
+    def test_zarinpal_own_gateway_failure_is_reported(self):
+        from unittest import mock
+
+        self.mgr.patch("/api/erp/settings/", {"gateway_provider": "zarinpal", "gateway_merchant": "Z" * 36, "gateway_active": True}, format="json")
+        with mock.patch("apps.shop.payments._post_json", return_value={"data": {"code": -9}}):
+            r = self.order()
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.mgr.get("/api/erp/inventory/").data["results"][0]["stock"], None)       # سفارش ناموفق، موجودی دست‌نخورده

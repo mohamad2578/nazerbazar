@@ -21,7 +21,7 @@ from apps.market import price_api
 from apps.observatory import api as observatory
 from apps.orgs import api as orgs
 from apps.shop import api as shop
-from apps.shop import courier_api, order_api as orders
+from apps.shop import courier_api, erp_api, order_api as orders
 
 router = DefaultRouter()
 router.register("slides", cms.SlideViewSet, basename="slide")
@@ -47,6 +47,10 @@ router.register("shop-categories", shop.ShopCategoryViewSet, basename="shop-cate
 router.register("shop-products", shop.MyShopProductViewSet, basename="shop-product")
 router.register("shop-bundles", shop.ShopBundleViewSet, basename="shop-bundle")
 router.register("couriers", courier_api.CourierViewSet, basename="courier")
+router.register("erp/movements", erp_api.MovementViewSet, basename="erp-movement")
+router.register("erp/suppliers", erp_api.SupplierViewSet, basename="erp-supplier")
+router.register("erp/purchases", erp_api.PurchaseViewSet, basename="erp-purchase")
+router.register("erp/expenses", erp_api.ExpenseViewSet, basename="erp-expense")
 router.register("other-prices", shop.ShopPriceReviewViewSet, basename="other-price")
 router.register("orders", orders.OrderViewSet, basename="order")
 router.register("public/geo", orgs.PublicGeoViewSet, basename="public-geo")
@@ -84,6 +88,16 @@ api = [
     path("public/featured-store/", shop.public_featured_store),
     path("public/stores/<int:pk>/bundles/", shop.public_bundles),
     path("courier/me/", courier_api.courier_me),
+    path("courier/stats/", courier_api.courier_stats),
+    path("courier/online/", courier_api.courier_online),
+    path("public/orders/<str:code>/invoice/", orders.my_order_invoice),
+    path("erp/settings/", erp_api.settings_view),
+    path("erp/dashboard/", erp_api.dashboard_view),
+    path("erp/reports/sales/", erp_api.sales_report_view),
+    path("erp/export/<str:name>/", erp_api.export_csv),
+    path("erp/inventory/", erp_api.inventory_list),
+    path("erp/inventory/<int:pk>/", erp_api.inventory_update),
+    path("erp/inventory/<int:pk>/adjust/", erp_api.inventory_adjust),
     path("courier/orders/", courier_api.courier_orders),
     path("courier/orders/<int:pk>/pickup/", courier_api.courier_pickup),
     path("courier/orders/<int:pk>/deliver/", courier_api.courier_deliver),

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, History, MessageSquareText, SlidersHorizontal, BadgePercent, BarChart3, Bell, Boxes, Building2, ClipboardCheck, ClipboardList, DatabaseBackup, FileSpreadsheet, GalleryHorizontal, Globe2, Home, Landmark, LogOut, Map, Menu, MessageSquareWarning,
-  Bike, Newspaper, Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
+  Bike, Calculator, Newspaper, Package, PackageSearch, Settings2, ShoppingBag, ShoppingCart, Store, Tags, Truck, Users, X,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -18,6 +18,8 @@ type Item = {
   section?: string;
   /** کلید(های) گزارش در تنظیمات «گزارش‌های اداره صمت»؛ اگر هیچ‌کدام مجاز نباشد منو پنهان می‌شود */
   reports?: string[];
+  /** فقط برای مالک فروشگاه ویژه (انبار و حسابداری) */
+  featured?: boolean;
 };
 
 const G: Role[] = ["governorate", "samt"];
@@ -37,6 +39,13 @@ export const NAV: Item[] = [
   { to: "/panel/price-upload", label: "بارگذاری نرخ‌ها", icon: FileSpreadsheet, roles: LOAD },
   { to: "/panel/price-log", label: "سابقه حداکثر قیمت‌ها", icon: History, roles: ["samt"] },
   { to: "/panel/orders", label: "سفارش‌ها", icon: ShoppingCart, roles: [...M, "store"], mobile: true, section: "orders" },
+  { to: "/panel/erp", label: "داشبورد مالی و انبار", short: "مالی", icon: Calculator, roles: ["store"], featured: true, end: true, mobile: true },
+  { to: "/panel/erp/inventory", label: "موجودی انبار", short: "انبار", icon: Boxes, roles: ["store"], featured: true },
+  { to: "/panel/erp/purchases", label: "خرید و تامین‌کنندگان", icon: Truck, roles: ["store"], featured: true },
+  { to: "/panel/erp/expenses", label: "هزینه‌ها", icon: ClipboardList, roles: ["store"], featured: true },
+  { to: "/panel/erp/reports", label: "گزارش سود و فروش", icon: BarChart3, roles: ["store"], featured: true },
+  { to: "/panel/erp/invoices", label: "فاکتورهای فروش", icon: FileSpreadsheet, roles: ["store"], featured: true },
+  { to: "/panel/erp/settings", label: "تنظیمات مالی و درگاه", icon: SlidersHorizontal, roles: ["store"], featured: true },
   { to: "/panel/couriers", label: "مدیریت پیک", short: "پیک‌ها", icon: Bike, roles: ["store"], mobile: true },
   { to: "/panel/my-shop", label: "فروشگاه اینترنتی من", icon: ShoppingBag, roles: ["store"], mobile: true },
   { to: "/panel/specials", label: "تخفیفات ویژه", short: "تخفیفات", icon: BadgePercent, roles: ["store"], mobile: true },
@@ -73,7 +82,8 @@ export default function PanelLayout() {
   const items = NAV.filter((i) =>
     (role === "admin" || i.roles.includes(role)) &&
     (!i.section || access.unionSection(i.section)) &&
-    (!i.reports || i.reports.some(access.samtReport)),
+    (!i.reports || i.reports.some(access.samtReport)) &&
+    (!i.featured || !!user!.store?.is_featured),
   );
   const notif = useQuery({ queryKey: ["notifications-count"], queryFn: () => api.get<{ unread: number }>("/notifications/", { is_read: false, page_size: 1 }), refetchInterval: 60_000 });
   const pendingStores = useQuery({

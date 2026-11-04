@@ -74,6 +74,11 @@ class ShopProduct(TimeStamped):
                                         help_text="خالی = نامحدود؛ با هر خرید کم می‌شود و با صفر شدن، خرید بسته می‌شود")
     per_user_limit = models.PositiveSmallIntegerField("سقف خرید هر کاربر", null=True, blank=True,
                                                       help_text="خالی = بدون سقف؛ حداکثر تعدادی که هر کاربر می‌تواند بخرد")
+    # انبارداری: قیمت تمام‌شده (میانگین موزون خریدها)، کد کالا، حد سفارش مجدد و محل قفسه
+    cost_price = models.PositiveBigIntegerField("قیمت تمام‌شده واحد (ریال)", default=0)
+    sku = models.CharField("کد کالا / بارکد", max_length=40, blank=True)
+    min_stock = models.PositiveIntegerField("حد سفارش مجدد", default=0, help_text="با رسیدن موجودی به این عدد هشدار کمبود داده می‌شود")
+    shelf = models.CharField("محل قفسه", max_length=40, blank=True)
 
     status = models.CharField("وضعیت تایید", max_length=10, choices=Status.choices,
                               default=Status.PENDING, db_index=True)
@@ -115,4 +120,8 @@ class ShopProduct(TimeStamped):
 
 
 from .commerce import Courier, Payment, ShopBundle, ShopBundleItem, UserAddress, Wallet, WalletTx  # noqa: E402,F401
+from .erp import (  # noqa: E402,F401
+    CourierSettlement, Expense, PurchaseInvoice, PurchaseItem, StockMovement, StoreSettings, Supplier,
+    SupplierPayment,
+)
 from .orders import Order, OrderEvent, OrderItem  # noqa: E402,F401  (ثبت مدل‌ها در اپ)

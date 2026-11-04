@@ -57,6 +57,10 @@ class Order(TimeStamped):
     picked_at = models.DateTimeField("زمان تحویل به پیک", null=True, blank=True)
     delivered_at = models.DateTimeField("زمان تحویل به مشتری", null=True, blank=True)
     discount = models.PositiveBigIntegerField("تخفیف بسته‌ها (ریال)", default=0)
+    tax = models.PositiveBigIntegerField("مالیات بر ارزش افزوده (ریال)", default=0)
+    delivery_fee = models.PositiveBigIntegerField("هزینه ارسال (ریال)", default=0)
+    courier_fee = models.PositiveBigIntegerField("کارمزد پیک (ریال)", default=0)
+    invoice_no = models.CharField("شماره فاکتور", max_length=24, blank=True, db_index=True)
     payment_method = models.CharField("روش پرداخت", max_length=10, choices=Payment.choices, default=Payment.CASH)
     payment_status = models.CharField("وضعیت پرداخت", max_length=10, choices=PaymentStatus.choices,
                                       default=PaymentStatus.UNPAID, db_index=True)
@@ -96,6 +100,7 @@ class OrderItem(models.Model):
     unit_display = models.CharField("واحد", max_length=30, blank=True)
     price = models.PositiveBigIntegerField("قیمت واحد (ریال)")
     list_price = models.PositiveBigIntegerField("قیمت مصرف‌کننده (ریال)", default=0)
+    cost_price = models.PositiveBigIntegerField("قیمت تمام‌شده واحد در لحظه فروش (ریال)", default=0)
     bundle_name = models.CharField("بسته پیشنهادی", max_length=200, blank=True)
     quantity = models.PositiveSmallIntegerField("تعداد", default=1)
 

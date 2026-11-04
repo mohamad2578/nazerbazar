@@ -14,6 +14,7 @@ from apps.core.permissions import role_permission
 from apps.core.views import ScopedModelViewSet
 from apps.orgs.models import Store, stores_in_county
 
+from . import inventory
 from .commerce import ShopBundle, ShopBundleItem
 from .models import ShopCategory, ShopProduct
 
@@ -46,9 +47,10 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "price", "old_price", "discount_percent", "unit", "unit_display", "brand",
             "is_available", "is_active", "order", "created_at",
             "status", "status_display", "reviewed_at", "review_note", "is_special",
-            "stock", "per_user_limit", "sold_out",
+            "stock", "per_user_limit", "sold_out", "sku", "min_stock", "shelf", "cost_price",
         ]
-        read_only_fields = ["store", "status", "reviewed_at", "review_note"]
+        # قیمت تمام‌شده فقط از فاکتور خرید به‌روز می‌شود
+        read_only_fields = ["store", "status", "reviewed_at", "review_note", "cost_price"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -59,7 +61,8 @@ class ShopProductSerializer(serializers.ModelSerializer):
             or instance.store.owner_id == user.pk
         ))
         if not staff:
-            data.pop("stock", None)
+            for k in ("stock", "cost_price", "min_stock", "shelf"):
+                data.pop(k, None)
         return data
 
     def validate(self, attrs):
@@ -104,7 +107,12 @@ class MyShopProductViewSet(ScopedModelViewSet):
         store = self._my_store()
         # فروشگاه ویژه بدون تایید صمت عرضه می‌کند
         status = ShopProduct.Status.APPROVED if store.is_featured else ShopProduct.Status.PENDING
+        # در فروشگاه ویژه موجودی اولیه به‌صورت «موجودی اولیه» در دفتر انبار ثبت می‌شود
+        opening = serializer.validated_data.pop("stock", None) if store.is_featured else None
         product = self._save_in_scope(serializer, store=store, status=status)
+        if opening:
+            inventory.record(product.pk, opening, inventory.Kind.OPENING, note="موجودی اولیه", by=self.request.user)
+            product.refresh_from_db()
         if not store.is_featured:
             self._notify_reviewers(product, "محصول جدید در انتظار تایید")
 
@@ -117,8 +125,18 @@ class MyShopProductViewSet(ScopedModelViewSet):
             for f in REVIEWABLE_FIELDS
         )
         reviewed = changed and not instance.store.is_featured
+        new_stock = None
+        if instance.store.is_featured and "stock" in serializer.validated_data:
+            # تغییر موجودی در فروشگاه ویژه فقط از طریق دفتر انبار (تعدیل) انجام می‌شود
+            wanted = serializer.validated_data.pop("stock")
+            if wanted is not None and wanted != instance.stock:
+                new_stock = wanted
         extra = {"status": ShopProduct.Status.PENDING, "reviewed_at": None, "review_note": ""} if reviewed else {}
         product = self._save_in_scope(serializer, **extra)
+        if new_stock is not None:
+            kind = inventory.Kind.OPENING if instance.stock is None else inventory.Kind.ADJUST
+            inventory.adjust(product, set_to=new_stock, kind=kind, note="ویرایش موجودی از فرم کالا", by=self.request.user)
+            product.refresh_from_db()
         if reviewed:
             self._notify_reviewers(product, "تغییر قیمت/مشخصات محصول در انتظار تایید")
 

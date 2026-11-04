@@ -35,6 +35,13 @@ const Stores = lazy(() => import("./pages/panel/Stores"));
 const Products = lazy(() => import("./pages/panel/Products"));
 const FeaturedShop = lazy(() => import("./pages/public/FeaturedShop"));
 const Couriers = lazy(() => import("./pages/panel/Couriers"));
+const ErpDashboard = lazy(() => import("./pages/panel/erp/ErpDashboard"));
+const ErpInventory = lazy(() => import("./pages/panel/erp/Inventory"));
+const ErpPurchases = lazy(() => import("./pages/panel/erp/Purchases"));
+const ErpExpenses = lazy(() => import("./pages/panel/erp/Expenses"));
+const ErpReports = lazy(() => import("./pages/panel/erp/Reports"));
+const ErpInvoices = lazy(() => import("./pages/panel/erp/Invoices"));
+const ErpSettings = lazy(() => import("./pages/panel/erp/ErpSettings"));
 const CourierApp = lazy(() => import("./pages/courier/CourierApp"));
 const Prices = lazy(() => import("./pages/panel/Prices"));
 const PriceApprovals = lazy(() => import("./pages/panel/PriceApprovals"));
@@ -112,6 +119,13 @@ export default function App() {
           <Route path="profile" element={<RequireAuth roles={["store"]}><StoreProfile /></RequireAuth>} />
           <Route path="my-shop" element={<RequireAuth roles={["store"]}><MyShop /></RequireAuth>} />
           <Route path="couriers" element={<RequireAuth roles={["store"]}><Couriers /></RequireAuth>} />
+          <Route path="erp" element={<RequireAuth roles={["store"]}><ErpDashboard /></RequireAuth>} />
+          <Route path="erp/inventory" element={<RequireAuth roles={["store"]}><ErpInventory /></RequireAuth>} />
+          <Route path="erp/purchases" element={<RequireAuth roles={["store"]}><ErpPurchases /></RequireAuth>} />
+          <Route path="erp/expenses" element={<RequireAuth roles={["store"]}><ErpExpenses /></RequireAuth>} />
+          <Route path="erp/reports" element={<RequireAuth roles={["store"]}><ErpReports /></RequireAuth>} />
+          <Route path="erp/invoices" element={<RequireAuth roles={["store"]}><ErpInvoices /></RequireAuth>} />
+          <Route path="erp/settings" element={<RequireAuth roles={["store"]}><ErpSettings /></RequireAuth>} />
           <Route path="specials" element={<RequireAuth roles={["store"]}><Specials /></RequireAuth>} />
           <Route path="orders" element={<RequireAuth roles={["store", "union", "chamber", "governorate"]}><Orders /></RequireAuth>} />
           <Route path="complaints" element={<Complaints />} />

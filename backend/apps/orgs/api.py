@@ -1,3 +1,6 @@
+"""API ساختار سازمانی و کارتابل فروشگاه‌ها (تایید/رد/تعلیق، تعریف مستقیم فروشگاه توسط مسئول)، ثبت‌نام فروشگاه توسط شهروند
+(`/my-store/`) و جغرافیای عمومی. ملاحظات امنیتی: `is_featured` فقط توسط مدیر کل؛ رمز حساب مالک موجود هرگز توسط مسئول تعیین نمی‌شود.
+"""
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers, viewsets

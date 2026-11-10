@@ -1,3 +1,8 @@
+"""API سفارش‌ها (کارتابل فروشگاه و «سفارش‌های من»)، کیف پول، پرداخت (بازگشت از درگاه)، نشانی‌های مشتری و فاکتور.
+
+نکته‌ها: سفارش «در انتظار پرداخت» در کارتابل فروشگاه دیده نمی‌شود. مسئولان نظارتی (اتحادیه/اتاق/صمت/استانداری) نشانی، مختصات و
+تلفن مشتری را نمی‌بینند (`OrderSerializer.to_representation`). منطق ثبت و تغییر وضعیت در `order_services.py` است.
+"""
 from django.db.models import Count, Q, Sum
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404

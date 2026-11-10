@@ -1,3 +1,4 @@
+"""رصد بازار: کالاهای اساسی و سبد خانوار، گزارش تامین/قیمت زنجیره، هشدارها و API عمومی `/public/observatory/`."""
 from django.db.models import Avg, Max, Min, Q
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action, api_view, permission_classes

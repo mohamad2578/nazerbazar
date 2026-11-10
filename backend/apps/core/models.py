@@ -1,3 +1,4 @@
+"""مدل پایه `TimeStamped`، تنظیمات سراسری `SystemSettings` (یک ردیف؛ مدیر کل آن را تعیین می‌کند) و سابقه پیامک `SmsLog`."""
 from django.db import models
 
 

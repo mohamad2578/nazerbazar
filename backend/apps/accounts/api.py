@@ -1,3 +1,9 @@
+"""ورود و حساب کاربری: کد پیامکی (OTP)، ورود با رمز، ثبت‌نام شهروند، پروفایل (`/auth/me/`) و اعلان‌ها.
+
+پاسخ ورود شامل JWT (access ۶ ساعت، refresh ۳۰ روز) و مشخصات کاربر (`MeSerializer`) است؛ فرانت از فیلدهای `role`، `store`
+(با `is_featured`) و `is_courier` تصمیم می‌گیرد کدام منو/صفحه را نشان دهد. درخواست OTP بر اساس IP محدود می‌شود (`OTPThrottle`)
+و تعداد تلاش‌های اشتباه هر کد در `OTP.MAX_ATTEMPTS` سقف دارد.
+"""
 from django.contrib.auth import authenticate
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes, throttle_classes

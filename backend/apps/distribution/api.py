@@ -1,3 +1,7 @@
+"""تخصیص و توزیع کالای تنظیم بازار: تخصیص استانی ← سهم اتحادیه ← سهمیه فروشگاه، به‌همراه API عمومی رهگیری با کد.
+
+ظرفیت هر سطح نباید از سطح بالاتر بیشتر شود؛ قواعد در `services.py` (`set_share`, `assign_quota`, `advance_quota`) اعمال می‌شود.
+"""
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers

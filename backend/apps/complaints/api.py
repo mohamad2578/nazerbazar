@@ -1,3 +1,8 @@
+"""گزارش تخلف شهروندان: ثبت، پیگیری با کد رهگیری، رسیدگی اتحادیه و رونوشت برای اتاق اصناف.
+
+شاکی برای فروشگاه ناشناس می‌ماند (`StoreComplaintSerializer`)؛ بستن شکایت بدون نوشتن نتیجه ممکن نیست. ثبت شکایت برای هر
+کاربر ۱۰ بار در ساعت است (`ComplaintThrottle`). منطق گردش وضعیت در `services.py`.
+"""
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers

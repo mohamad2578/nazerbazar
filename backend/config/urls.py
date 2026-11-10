@@ -1,3 +1,9 @@
+"""مسیرهای API (همه زیر `/api/`).
+
+سه گروه: (۱) `router` برای منابع CRUD پنل؛ (۲) مسیرهای تابعی مثل `auth/`، `public/...` (بدون ورود)، `store/...` (پنل فروشگاه)،
+`wallet/`, `courier/...`, `erp/...` (انبار و حسابداری فروشگاه ویژه)؛ (۳) `schema/` و `docs/` (مستندات OpenAPI).
+ترتیب مهم است: مسیرهای تابعی باید **قبل از** `include(router.urls)` بیایند تا مثلا `orders/assign/` با `orders/<pk>/` اشتباه نشود.
+"""
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin

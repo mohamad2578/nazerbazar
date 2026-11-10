@@ -1,3 +1,6 @@
+"""آمار بازدید: ثبت بازدید صفحه و کلیک روی کالا از سایت عمومی (`/public/track/`، برای ناشناس‌ها محدود)
+و گزارش آمار برای اداره صمت/استانداری (`/analytics/visits/`). شناسه مرورگر در فرانت ساخته می‌شود (`frontend/src/lib/track.ts`).
+"""
 from datetime import datetime, timedelta
 
 from django.db.models import Count, Q

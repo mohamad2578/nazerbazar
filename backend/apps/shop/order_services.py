@@ -1,3 +1,13 @@
+"""منطق ثبت و گردش سفارش (لایه سرویس؛ نه API).
+
+`place_order` در یک تراکنش: اعتبارسنجی اقلام/بسته‌ها، قفل ردیف کالاها، کنترل موجودی و سقف خرید هر کاربر، محاسبه مبلغ (تخفیف بسته،
+مالیات و هزینه ارسال فروشگاه ویژه)، شماره فاکتور و کسر موجودی از دفتر انبار. **تماس با درگاه داخل تراکنش نیست**:
+بعد از ثبت، `start_online_payment` صدا زده می‌شود و در صورت خطا سفارش لغو و موجودی آزاد می‌شود.
+
+وضعیت‌ها: awaiting_payment → new → confirmed → preparing → ready → out_for_delivery → delivered، و canceled.
+لغو: موجودی برمی‌گردد و پرداخت‌شده به کیف پول بازگردانده می‌شود. سفارش اینترنتیِ پرداخت‌نشده بعد از `UNPAID_TTL` (۳۰ دقیقه) با
+`expire_unpaid_orders` (از `daily_jobs` و ویترین) لغو می‌شود.
+"""
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError

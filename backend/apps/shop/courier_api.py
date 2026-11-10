@@ -1,3 +1,6 @@
+"""مدیریت پیک (برای مدیر فروشگاه: تعریف پیک، ارسال لیست سفارش‌ها، حساب و تسویه) و اپلیکیشن پیک (`/courier/...`: سفارش‌های من،
+تحویل‌گرفتن، تحویل، تحویل ناموفق، آنلاین/آفلاین، آمار). منطق گردش در `courier_services.py`؛ حسابداری پیک در `erp_reports.courier_ledger`.
+"""
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404

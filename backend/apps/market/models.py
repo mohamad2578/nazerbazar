@@ -1,3 +1,7 @@
+"""مدل‌های بازار: دسته، کالای اساسی (`Product`، نرخ مصوب اتحادیه)، تاریخچه نرخ با وضعیت تایید (`OfficialPrice`)،
+قیمت اعلامی فروشگاه (`StoreOffer`)، نظر و امتیاز، و snapshot روزانه. `Product.is_service` + `ServiceTariff` برای کالای خدماتی
+(نرخ‌نامه به‌جای یک قیمت، مثل تعویض روغن). همه مبلغ‌ها **ریال** است. قواعد قیمت‌گذاری در `services.py`.
+"""
 from decimal import ROUND_CEILING, Decimal
 
 from django.conf import settings

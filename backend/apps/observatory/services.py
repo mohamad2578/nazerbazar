@@ -1,3 +1,7 @@
+"""محاسبه هشدارهای بازار (`scan_alerts`، هر ساعت از `daily_jobs`) و شاخص‌ها: قیمت واحد هر کالای اساسی و هزینه سبد خانوار (`basket_cost`).
+
+هشدار با `dedupe_key` یکتا می‌شود تا اجرای دوباره، تکراری نسازد. آستانه جهش قیمت از `MARKET["ALERT_CHANGE_PERCENT"]` می‌آید.
+"""
 from collections import defaultdict
 from datetime import timedelta
 

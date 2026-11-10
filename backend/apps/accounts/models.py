@@ -1,3 +1,8 @@
+"""کاربر (ورود با موبایل)، نقش‌ها (`Role`)، کد یکبارمصرف OTP و اعلان‌های درون‌برنامه‌ای.
+
+`notify(users, title, body, link)` اعلان می‌سازد؛ فرانت آن را هر ۶۰ ثانیه می‌خواند (پوش موبایلی وجود ندارد).
+حوزه دسترسی کاربر سازمانی با `province` / `chamber` / `union` مشخص می‌شود و در `apps/core/scoping.py` مصرف می‌شود.
+"""
 from datetime import timedelta
 
 from django.conf import settings

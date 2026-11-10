@@ -1,3 +1,8 @@
+"""منطق توزیع کالای تنظیم بازار.
+
+`set_share` سهم اتحادیه را از تخصیص استانی می‌گیرد، `assign_quota` سهم را بین فروشگاه‌ها تقسیم می‌کند (با کنترل ظرفیت)،
+`suggest_split` تقسیم پیشنهادی بر اساس امتیاز فروشگاه می‌دهد و `advance_quota` مراحل ارسال/تحویل/فروش و کسری تحویل (نشتی) را ثبت می‌کند.
+"""
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError

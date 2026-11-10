@@ -1,3 +1,7 @@
+"""API کالا و نرخ (پنل اتحادیه/صمت/اتاق اصناف)، پنل قیمت فروشگاه، و API عمومی سایت (فهرست کالا، صفحه کالا/فروشگاه، نقشه، آمار).
+
+صفحه عمومی کالای خدماتی به‌جای فهرست فروشگاه‌ها، نرخ‌نامه (`ServiceTariff`) را برمی‌گرداند.
+"""
 from django.db import transaction
 from django.db.models import Avg, Count, Min, OuterRef, Prefetch, Q, Subquery
 from django.shortcuts import get_object_or_404

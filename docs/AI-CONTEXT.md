@@ -96,6 +96,8 @@ cd frontend && npx tsc -b && npm run build               # تایپ‌چک + س�
 
 ## ۵. فرانت‌اند (`frontend/src/`)
 
+راهنمای کامل‌تر: [FRONTEND.md](FRONTEND.md).
+
 - مسیرها همه در `App.tsx` (lazy)، سه بخش: سایت عمومی (`PublicLayout`)، پنل (`PanelLayout`، منو در آرایه `NAV`؛ آیتم‌های انبار/مالی با `featured: true` فقط برای مالک فروشگاه ویژه)، و اپ پیک (`/courier`، بدون layout).
 - `lib/api.ts`: درخواست با JWT و refresh خودکار؛ خطای سرور → `ApiError` با پیام فارسی. `lib/format.ts`: تومان/ریال، تاریخ شمسی، اعداد فارسی. `lib/erp.ts`: فاکتور رسمی چاپی، مبلغ به حروف، قالب‌های کوتاه مبلغ. `lib/orders.ts`: انواع سفارش.
 - کوئری‌ها با TanStack Query؛ کلیدها مثل `["erp-inventory", q, status]`. پس از mutation کلیدهای وابسته را `invalidateQueries` کنید (نمونه: `Purchases.tsx`).

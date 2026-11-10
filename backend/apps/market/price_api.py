@@ -58,6 +58,7 @@ def pending_prices(request):
 @api_view(["POST"])
 @permission_classes([Reviewers])
 def review_price(request, pk):
+    """تایید یا رد نرخ در انتظار (اتاق اصناف/صمت/استانداری/مدیر کل)؛ ورودی `approve` و `note` (برای رد، دلیل الزامی است)."""
     from .services import review_price as do_review
 
     record = get_object_or_404(

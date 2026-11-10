@@ -118,6 +118,7 @@ class OrderViewSet(ScopedModelViewSet):
 
     @action(detail=True, methods=["post"])
     def transition(self, request, pk=None):
+        """تغییر وضعیت سفارش توسط فروشگاه (`order_services.change_order_status`)؛ فقط انتقال‌های مجاز."""
         order = self.get_object()
         order_services.change_order_status(
             order, request.user, request.data.get("status", ""), str(request.data.get("note") or "").strip()
@@ -127,10 +128,12 @@ class OrderViewSet(ScopedModelViewSet):
 
     @action(detail=True)
     def invoice(self, request, pk=None):
+        """داده فاکتور رسمی یک سفارش برای فروشنده (مشخصات فروشنده/خریدار، اقلام، مالیات و ارسال)."""
         return Response(invoice_payload(self.get_object()))
 
     @action(detail=False)
     def summary(self, request):
+        """شمارنده‌ها و فروش تحویل‌شده برای نشان‌های کارتابل سفارش."""
         qs = self.get_queryset()
         agg = qs.aggregate(
             count=Count("pk"),
@@ -181,6 +184,7 @@ def place_order(request, pk):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_orders(request):
+    """۵۰ سفارش اخیر مشتری (همه فروشگاه‌ها) همراه اقلام، تخفیف، پرداخت و وضعیت پیک."""
     qs = Order.objects.filter(customer=request.user).select_related("store", "courier__user").prefetch_related("items", "events")
     return Response(OrderSerializer(qs[:50], many=True).data)
 
@@ -188,6 +192,7 @@ def my_orders(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def cancel_my_order(request, code):
+    """لغو سفارش توسط مشتری (فقط تا پیش از آماده‌سازی)؛ موجودی برمی‌گردد و پول پرداخت‌شده به کیف پول بازمی‌گردد."""
     order = get_object_or_404(Order, code=code.upper(), customer=request.user)
     order_services.change_order_status(order, request.user, Order.Status.CANCELED, "لغو توسط مشتری")
     order.refresh_from_db()
@@ -197,6 +202,7 @@ def cancel_my_order(request, code):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_order_invoice(request, code):
+    """داده فاکتور یک سفارش برای چاپ توسط مشتری (فقط سفارش خودش)."""
     order = get_object_or_404(Order, code=code.upper(), customer=request.user)
     return Response(invoice_payload(order))
 
@@ -241,6 +247,7 @@ def _tx(t):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_wallet(request):
+    """موجودی کیف پول (ریال) و ۵۰ تراکنش اخیر."""
     w = wallet.get_wallet(request.user)
     return Response({"balance": w.balance, "txs": [_tx(t) for t in w.txs.all()[:50]]})
 
@@ -293,6 +300,7 @@ class AddressSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "address", "receiver_phone", "lat", "lng", "is_default"]
 
     def validate_receiver_phone(self, v):
+        """تلفن تحویل‌گیرنده (اختیاری) باید موبایل معتبر باشد و به 09xxxxxxxxx تبدیل می‌شود."""
         if not v:
             return ""
         try:
@@ -301,11 +309,13 @@ class AddressSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("شماره تلفن تحویل‌گیرنده باید موبایل معتبر باشد.")
 
     def validate_lat(self, v):
+        """عرض جغرافیایی بین ‎−۹۰ و ۹۰."""
         if v is not None and not -90 <= v <= 90:
             raise serializers.ValidationError("عرض جغرافیایی نامعتبر است.")
         return v
 
     def validate_lng(self, v):
+        """طول جغرافیایی بین ‎−۱۸۰ و ۱۸۰."""
         if v is not None and not -180 <= v <= 180:
             raise serializers.ValidationError("طول جغرافیایی نامعتبر است.")
         return v
@@ -314,6 +324,7 @@ class AddressSerializer(serializers.ModelSerializer):
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def my_addresses(request):
+    """فهرست (GET) و افزودن (POST) نشانی‌های ذخیره‌شده مشتری؛ حداکثر ۱۰ نشانی، اولی پیش‌فرض می‌شود."""
     qs = UserAddress.objects.filter(user=request.user)
     if request.method == "GET":
         return Response(AddressSerializer(qs, many=True).data)
@@ -330,6 +341,7 @@ def my_addresses(request):
 @api_view(["PATCH", "DELETE"])
 @permission_classes([IsAuthenticated])
 def my_address_detail(request, pk):
+    """ویرایش یا حذف یک نشانی مشتری؛ با حذف نشانی پیش‌فرض، نشانی بعدی پیش‌فرض می‌شود."""
     obj = get_object_or_404(UserAddress, pk=pk, user=request.user)
     if request.method == "DELETE":
         was_default = obj.is_default

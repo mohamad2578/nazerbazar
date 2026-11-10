@@ -78,6 +78,7 @@ class TariffSerializer(serializers.ModelSerializer):
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
+    """دسته‌بندی کالاها؛ خواندن برای همه، تغییر فقط مدیر کل."""
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     pagination_class = None
@@ -138,6 +139,7 @@ class ProductViewSet(ScopedModelViewSet):
 
     @action(detail=True, methods=["post"])
     def set_price(self, request, pk=None):
+        """تعیین حداکثر قیمت کالا. نرخ اتحادیه «در انتظار تایید اتاق اصناف» می‌ماند؛ صمت و بالاتر بی‌درنگ اعمال می‌شود (`services.set_official_price`)."""
         product = self.get_object()
         if product.is_service:
             raise ValidationError({"detail": "این کالا خدماتی است؛ نرخ‌نامه خدمات را ویرایش کنید."})
@@ -186,6 +188,7 @@ class ProductViewSet(ScopedModelViewSet):
 
     @action(detail=True)
     def history(self, request, pk=None):
+        """تاریخچه نرخ‌های کالا. فقط مدیر کل و صمت می‌بینند چه کسی و چه ساعتی تغییر داده؛ بقیه فقط قیمت و تاریخ."""
         product = self.get_object()
         rows = OfficialPriceSerializer(product.price_history.all()[:100], many=True).data
         if request.user.role not in ("admin", "samt"):
@@ -198,6 +201,7 @@ class ProductViewSet(ScopedModelViewSet):
 
     @action(detail=True)
     def offers(self, request, pk=None):
+        """قیمت‌های اعلام‌شده فروشگاه‌ها برای این کالا (از ارزان به گران) همراه وضعیت «به‌روزنشده»."""
         product = self.get_object()
         qs = product.offers.select_related("store")
         return Response([
@@ -300,6 +304,7 @@ def store_save_offers(request):
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def store_remove_offer(request, product_id):
+    """فروشگاه قیمت خودش را برای یک کالا حذف می‌کند (کالا از فهرست آن فروشگاه می‌رود)."""
     store = _my_store(request)
     store.offers.filter(product_id=product_id).delete()
     return Response(status=204)
@@ -348,6 +353,7 @@ def _product_card(p, request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public_products(request):
+    """فهرست عمومی کالاها با فیلتر شهرستان/اتحادیه/دسته/کالای اساسی/جستجو؛ هر کالا کمترین قیمت و تعداد فروشگاه دارد. صفحه‌بندی‌شده. کالای خدماتی بدون قیمت تکی هم اگر نرخ‌نامه داشته باشد می‌آید."""
     from apps.core.pagination import Pagination
 
     qs = _public_products(request.query_params)
@@ -406,6 +412,7 @@ def _shop_counts(store_ids) -> dict[int, int]:
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public_product_detail(request, pk):
+    """صفحه عمومی کالا: فروشگاه‌ها مرتب‌شده (ارزان‌ترین، سپس نزدیک‌ترین، سپس امتیاز)، روند ۳۰ نرخ اخیر و آمار. برای کالای خدماتی به‌جای فروشگاه‌ها، `tariffs` (نرخ‌نامه) برمی‌گردد."""
     p = get_object_or_404(
         Product.objects.select_related("union__chamber__county", "category"), pk=pk, is_active=True
     )
@@ -451,6 +458,7 @@ class ReviewSerializer(serializers.ModelSerializer):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public_store_detail(request, pk):
+    """صفحه عمومی فروشگاه: مشخصات، قیمت کالاهای اساسی، نظرات و `is_featured` (فروشگاه ویژه ویترین جدا دارد: `/s/<id>/shop`)."""
     s = get_object_or_404(Store.objects.select_related("union__chamber__county"), pk=pk, status=Store.Status.ACTIVE)
     offers = services.visible_offers().filter(store=s).select_related("product", "store").order_by("product__name")
     return Response({
@@ -471,6 +479,7 @@ def public_store_detail(request, pk):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def submit_review(request, pk):
+    """امتیاز (۱ تا ۵) و نظر شهروند برای فروشگاه؛ هر کاربر یک نظر (به‌روز می‌شود) و مالک نمی‌تواند به فروشگاه خودش نظر بدهد. میانگین امتیاز فروشگاه بازمحاسبه می‌شود."""
     store = get_object_or_404(Store, pk=pk, status=Store.Status.ACTIVE)
     if store.owner_id == request.user.pk:
         raise ValidationError({"detail": "امکان ثبت نظر برای فروشگاه خودتان وجود ندارد."})
@@ -487,6 +496,7 @@ def submit_review(request, pk):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public_stats(request):
+    """شمارنده‌های صفحه اصلی (فروشگاه، کالا، اتحادیه، شکایت حل‌شده) و آخرین تغییر نرخ‌ها، قابل فیلتر با شهرستان."""
     from apps.complaints.models import Complaint
 
     county = request.query_params.get("county")

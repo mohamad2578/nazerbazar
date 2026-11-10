@@ -126,9 +126,11 @@ class StoreAdminSerializer(StoreSerializer):
         read_only_fields = [f for f in StoreSerializer.Meta.read_only_fields if f != "is_featured"]
 
     def validate_owner_mobile(self, v):
+        """موبایل مالک را به قالب استاندارد 09xxxxxxxxx تبدیل می‌کند."""
         return normalize_mobile(v)
 
     def validate_is_featured(self, v):
+        """تعیین یا برداشتن «فروشگاه ویژه» فقط برای مدیر کل مجاز است."""
         user = self.context["request"].user
         current = getattr(self.instance, "is_featured", False)
         if v != current and user.role != Role.ADMIN:
@@ -159,6 +161,7 @@ class StoreRegisterSerializer(StoreSerializer):
 
 
 class ProvinceViewSet(ScopedModelViewSet):
+    """استان‌ها؛ خواندن برای استانداری/صمت."""
     queryset = Province.objects.all()
     serializer_class = ProvinceSerializer
     read_roles = ("governorate", "samt")
@@ -166,6 +169,7 @@ class ProvinceViewSet(ScopedModelViewSet):
 
 
 class CountyViewSet(ScopedModelViewSet):
+    """شهرستان‌ها؛ تغییر توسط استانداری و صمت."""
     queryset = County.objects.select_related("province")
     serializer_class = CountySerializer
     read_roles = ("governorate", "samt", "chamber")
@@ -175,6 +179,7 @@ class CountyViewSet(ScopedModelViewSet):
 
 
 class ChamberViewSet(ScopedModelViewSet):
+    """اتاق‌های اصناف؛ تغییر توسط استانداری و صمت."""
     queryset = Chamber.objects.select_related("county")
     serializer_class = ChamberSerializer
     read_roles = ("governorate", "samt", "chamber")
@@ -184,6 +189,7 @@ class ChamberViewSet(ScopedModelViewSet):
 
 
 class UnionViewSet(ScopedModelViewSet):
+    """اتحادیه‌ها؛ تغییر توسط استانداری، صمت و اتاق اصناف (در حوزه خودشان)."""
     queryset = Union.objects.select_related("chamber__county")
     serializer_class = UnionSerializer
     read_roles = ("governorate", "samt", "chamber", "union")
@@ -301,18 +307,22 @@ class StoreViewSet(ScopedModelViewSet):
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
+        """تایید و فعال‌سازی فروشگاه (اتحادیه/اتاق/صمت/استانداری/مدیر کل)؛ مالک شهروند به نقش «فروشگاه» ارتقا می‌یابد."""
         return self._set(request, Store.Status.ACTIVE)
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
+        """رد درخواست فروشگاه؛ نوشتن دلیل الزامی است."""
         return self._set(request, Store.Status.REJECTED, need_reason=True)
 
     @action(detail=True, methods=["post"])
     def suspend(self, request, pk=None):
+        """تعلیق فروشگاه فعال؛ نوشتن دلیل الزامی است."""
         return self._set(request, Store.Status.SUSPENDED, need_reason=True)
 
     @action(detail=True, methods=["post"])
     def verify(self, request, pk=None):
+        """اعطا یا برداشتن «نشان اعتماد» (احراز هویت کامل) فروشگاه."""
         store = self.get_object()
         v = request.data.get("value", True)
         store.is_verified = v not in (False, 0, "0", "false", "False", "")
@@ -363,9 +373,11 @@ def my_store(request):
 
 
 class PublicGeoViewSet(viewsets.ViewSet):
+    """فهرست‌های عمومی جغرافیا برای انتخاب شهرستان و فیلتر اتحادیه‌ها (بدون ورود)."""
     permission_classes = [AllowAny]
 
     def list(self, request):
+        """استان‌های فعال همراه شهرستان‌هایشان و مختصات مرکز."""
         provinces = Province.objects.filter(is_active=True).prefetch_related("counties")
         return Response([
             {"id": p.id, "name": p.name, "counties": [{"id": c.id, "name": c.name, "lat": c.lat, "lng": c.lng} for c in p.counties.all()]}
@@ -374,6 +386,7 @@ class PublicGeoViewSet(viewsets.ViewSet):
 
     @action(detail=False)
     def unions(self, request):
+        """اتحادیه‌های فعال؛ با `?county=` محدود به یک شهرستان."""
         qs = Union.objects.filter(is_active=True).select_related("chamber__county")
         if county := request.query_params.get("county"):
             qs = qs.filter(chamber__county_id=county)
@@ -381,5 +394,6 @@ class PublicGeoViewSet(viewsets.ViewSet):
 
     @action(detail=False)
     def chambers(self, request):
+        """اتاق‌های اصناف."""
         qs = Chamber.objects.select_related("county")
         return Response(ChamberSerializer(qs, many=True).data)

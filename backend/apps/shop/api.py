@@ -91,6 +91,7 @@ class ShopProductSerializer(serializers.ModelSerializer):
 
 
 class ShopCategoryViewSet(viewsets.ModelViewSet):
+    """دسته‌های محصولات فروشگاهی؛ خواندن برای همه، تغییر فقط مدیر کل."""
     queryset = ShopCategory.objects.all()
     serializer_class = ShopCategorySerializer
     pagination_class = None
@@ -266,14 +267,17 @@ class ShopPriceReviewViewSet(ScopedModelViewSet):
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
+        """تایید قیمت/محصول «سایر کالاها» توسط کارشناس صمت؛ پس از آن در ویترین عمومی دیده می‌شود و مالک اعلان می‌گیرد."""
         return self._review(request, True)
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
+        """رد محصول (با دلیل)؛ مالک اعلان می‌گیرد و می‌تواند اصلاح و دوباره ارسال کند."""
         return self._review(request, False)
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
+        """شمار محصولات در انتظار/تاییدشده/ردشده برای نشان کارتابل."""
         qs = self.filter_queryset(self.get_queryset())
         return Response({
             "pending": qs.filter(status=ShopProduct.Status.PENDING).count(),
@@ -468,6 +472,7 @@ def public_featured_store(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public_bundles(request, pk):
+    """بسته‌های پیشنهادی فعال یک فروشگاه؛ بسته‌ای که یکی از کالاهایش دیگر عمومی نیست نمایش داده نمی‌شود."""
     store = get_object_or_404(Store, pk=pk, status=Store.Status.ACTIVE)
     qs = store.bundles.filter(is_active=True).prefetch_related("items__product")
     # بسته‌ای که یکی از کالاهایش دیگر عرضه نمی‌شود، نمایش داده نمی‌شود

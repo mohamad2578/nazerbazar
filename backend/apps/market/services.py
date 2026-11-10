@@ -20,6 +20,7 @@ from .models import DailySnapshot, OfferLog, OfficialPrice, Product, StoreOffer
 
 
 def grace_period() -> timedelta:
+    """مهلتی (`MARKET_UPDATE_GRACE_HOURS`) که به فروشگاه برای اصلاح قیمت بعد از تغییر نرخ گفته می‌شود. فقط اطلاع‌رسانی است؛ کالایی به‌خاطر آن پنهان نمی‌شود."""
     return timedelta(hours=settings.MARKET["UPDATE_GRACE_HOURS"])
 
 
@@ -38,6 +39,7 @@ def visible_offers(now=None):
 
 
 def validate_offer_price(product: Product, price: int) -> None:
+    """قیمت فروشگاه باید بین `min_allowed_price` (نرخ منهای حداکثر تخفیف) و نرخ مصوب باشد؛ وگرنه ValidationError با پیام فارسی."""
     if not product.current_price:
         raise ValidationError({"price": "اتحادیه هنوز نرخی برای این کالا تعیین نکرده است."})
     if price > product.current_price:
@@ -188,6 +190,7 @@ def _apply_price(record: OfficialPrice, product: Product, discount: int) -> None
 
 @transaction.atomic
 def upsert_offer(store: Store, product: Product, price: int, is_available=True, by=None) -> StoreOffer:
+    """ثبت یا به‌روزرسانی قیمت فروشگاه برای یک کالا (کالا باید از اتحادیه‌های همان فروشگاه و فعال باشد؛ قیمت اعتبارسنجی می‌شود) و ثبت `OfferLog`. `by` وقتی مسئول به‌جای فروشگاه قیمت می‌دهد پر می‌شود."""
     if store.status != Store.Status.ACTIVE:
         raise ValidationError({"store": "فروشگاه شما هنوز فعال نشده است."})
     if product.union_id not in store.priceable_union_ids():

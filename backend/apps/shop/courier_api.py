@@ -85,6 +85,7 @@ class CourierViewSet(ScopedModelViewSet):
         return Response(CourierSerializer(self.get_queryset().get(pk=courier.pk)).data, status=201)
 
     def partial_update(self, request, *args, **kwargs):
+        """ویرایش پیک: فعال/غیرفعال، آنلاین/آفلاین، کارمزد هر تحویل (ریال) و نام."""
         courier = self.get_object()
         if request.data.get("is_active") is False or str(request.data.get("is_active")).lower() == "false":
             courier_services.deactivate_courier(courier)
@@ -108,6 +109,7 @@ class CourierViewSet(ScopedModelViewSet):
         return Response(CourierSerializer(self.get_queryset().get(pk=courier.pk)).data)
 
     def destroy(self, request, *args, **kwargs):
+        """حذف پیک = غیرفعال‌سازی (سفارش‌های تحویل‌نگرفته از او برداشته می‌شود؛ اگر سفارش در مسیر دارد رد می‌شود)."""
         courier_services.deactivate_courier(self.get_object())
         return Response(status=204)
 
@@ -192,6 +194,7 @@ class CourierOrderSerializer(serializers.ModelSerializer):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def courier_me(request):
+    """مشخصات پیک واردشده (نام، فروشگاه، آنلاین بودن، کارمزد هر تحویل)."""
     c = _courier(request)
     return Response({"id": c.pk, "name": c.user.full_name or c.user.mobile, "store": c.store.name, "is_online": c.is_online,
                      "fee_per_delivery": c.fee_per_delivery})
@@ -208,6 +211,7 @@ def courier_stats(request):
     done = Order.objects.filter(courier=c, status=Order.Status.DELIVERED)
 
     def count(days):
+        """شمار تحویل‌ها در `days` روز اخیر (تابع داخلی آمار)."""
         return done.filter(delivered_at__date__gte=today - timedelta(days=days - 1)).count()
 
     led = erp_reports.courier_ledger(c)
@@ -257,18 +261,21 @@ def _act(request, pk, fn, *args):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def courier_pickup(request, pk):
+    """پیک سفارشِ «آماده تحویل» را از فروشگاه تحویل می‌گیرد (→ در مسیر)."""
     return _act(request, pk, courier_services.pickup)
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def courier_deliver(request, pk):
+    """تحویل به مشتری؛ برای سفارش نقدی دریافت وجه هم ثبت می‌شود و کارمزد پیک همان لحظه ثابت می‌ماند."""
     return _act(request, pk, courier_services.deliver, str(request.data.get("note") or "").strip())
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def courier_fail(request, pk):
+    """تحویل ناموفق با دلیل: سفارش به وضعیت «آماده تحویل» برمی‌گردد و پیک از آن برداشته می‌شود."""
     return _act(request, pk, courier_services.fail, request.data.get("reason") or "")
 
 

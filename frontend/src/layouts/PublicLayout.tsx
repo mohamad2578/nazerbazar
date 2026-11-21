@@ -74,13 +74,29 @@ export default function PublicLayout() {
       <main className="mx-auto max-w-6xl px-4 py-5">
         <Outlet />
       </main>
-      <footer className="mx-auto hidden max-w-6xl px-4 py-10 text-sm text-muted lg:block">
+      <footer className="mx-auto max-w-6xl px-4 pb-28 pt-6 text-sm text-muted lg:py-10">
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
-          <span>سامانه ناظر ۷۲۴</span>
-          <div className="flex gap-4">
+          <span className="hidden lg:inline">سامانه ناظر ۷۲۴</span>
+          <div className="hidden gap-4 lg:flex">
             <Link to="/register-store" className="hover:text-ink">ثبت‌نام فروشگاه</Link>
             <Link to="/report" className="hover:text-ink">گزارش تخلف</Link>
           </div>
+          {/* نماد اعتماد الکترونیکی (enamad)؛ کد را از پنل enamad.ir گرفته‌ایم، بدون تغییر نگه دارید */}
+          <a
+            referrerPolicy="origin"
+            target="_blank"
+            rel="noopener"
+            href="https://trustseal.enamad.ir/?id=8680997&Code=mjebTGM3TAH1TIISCPpEYkZZk6YF8wRG"
+            className="mx-auto lg:mx-0"
+          >
+            <img
+              referrerPolicy="origin"
+              src="https://trustseal.enamad.ir/logo.aspx?id=8680997&Code=mjebTGM3TAH1TIISCPpEYkZZk6YF8wRG"
+              alt="نماد اعتماد الکترونیکی"
+              style={{ cursor: "pointer" }}
+              className="h-auto max-h-24 w-auto"
+            />
+          </a>
         </div>
       </footer>
       <InstallPrompt />
